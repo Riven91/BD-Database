@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { supabaseClient } from "@/lib/supabase";
+import { createSupabaseBrowserClient } from "@/src/lib/supabase/client";
 import { Button, Chip, Input, Textarea } from "@/components/ui";
 import { computeSystemLabels } from "@/lib/import-utils";
 
 export default function ContactDetailPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const params = useParams<{ id: string }>();
   const [contact, setContact] = useState<any | null>(null);
   const [templates, setTemplates] = useState<any[]>([]);
@@ -15,7 +16,7 @@ export default function ContactDetailPage() {
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabaseClient
+      const { data } = await supabase
         .from("contacts")
         .select(
           "*, location:locations(name), labels:contact_labels(labels(name)), tasks:tasks(*)"
@@ -24,7 +25,7 @@ export default function ContactDetailPage() {
         .single();
       setContact(data);
       setNotes(data?.notes ?? "");
-      const { data: templatesData } = await supabaseClient
+      const { data: templatesData } = await supabase
         .from("message_templates")
         .select("id, title, body")
         .eq("is_archived", false);
