@@ -133,31 +133,3 @@ export function mapRow(row: CsvRow, rowIndex: number): {
 
   return { contact, issues };
 }
-
-export function computeSystemLabels(data: {
-  date_erstgespraech?: string | null;
-  date_tattoo_termin?: string | null;
-  price_deposit_cents?: number | null;
-  price_total_cents?: number | null;
-  has_due_task?: boolean;
-  last_activity_at?: string | null;
-}): string[] {
-  const labels: string[] = [];
-  if (data.date_erstgespraech) labels.push("system:erstgespraech_geplant");
-  if (data.date_tattoo_termin) labels.push("system:tattoo_termin_geplant");
-  if (data.price_deposit_cents && data.price_deposit_cents > 0) {
-    labels.push("system:anzahlung_erhalten");
-  }
-  if (data.price_total_cents && data.price_total_cents > 0) {
-    labels.push("system:preis_gesetzt");
-  }
-  if (data.has_due_task) labels.push("system:task_faellig");
-  const lastActivity = data.last_activity_at ? new Date(data.last_activity_at) : null;
-  if (lastActivity) {
-    const now = new Date();
-    const diffDays = (now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24);
-    if (diffDays >= 30) labels.push("system:inaktiv_30");
-    else if (diffDays >= 14) labels.push("system:inaktiv_14");
-  }
-  return labels;
-}
