@@ -297,6 +297,7 @@ export default function DashboardPage() {
               (label) => !label.is_archived && !assignedLabelIds.includes(label.id)
             )
           );
+          const availableLabelIds = availableLabels.map((label) => label.id);
           const filteredAvailable = labelSearch
             ? availableLabels.filter((label) =>
                 label.name.toLowerCase().includes(labelSearch.toLowerCase())
@@ -307,12 +308,20 @@ export default function DashboardPage() {
             const { active, over } = event;
             if (!over) return;
             const labelId = String(active.id);
-            if (over.id === "assigned") {
+            const overId = String(over.id);
+            const isOverAssigned =
+              overId === "assigned" || assignedLabelIds.includes(overId);
+            const isOverAvailable =
+              overId === "available" || availableLabelIds.includes(overId);
+
+            if (isOverAssigned) {
+              if (assignedLabelIds.includes(labelId)) return;
               const label = labels.find((item) => item.id === labelId);
               if (label) handleAssignLabel(contact.id, label);
               return;
             }
-            if (over.id === "available" || over.id === "remove") {
+            if (isOverAvailable || overId === "remove") {
+              if (!assignedLabelIds.includes(labelId)) return;
               handleRemoveLabel(contact.id, labelId);
             }
           };

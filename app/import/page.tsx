@@ -37,7 +37,18 @@ export default function ImportPage() {
     const workbook = XLSX.read(data, { type: isCsv ? "string" : "array" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json<CsvRow>(sheet, { defval: "" });
+    const normalizeRow = (row: Record<string, any>) =>
+      Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [
+          key,
+          value == null ? "" : String(value)
+        ])
+      );
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, {
+      defval: "",
+      raw: false
+    });
+    const rows = rawRows.map(normalizeRow) as CsvRow[];
 
     const issues: PreviewStats["errors"] = [];
     const contacts: NormalizedContact[] = [];

@@ -87,7 +87,8 @@ export function mapRow(row: CsvRow, rowIndex: number): {
   issues: ImportIssue[];
 } {
   const issues: ImportIssue[] = [];
-  const phoneRaw = row["Telefon"]?.trim() ?? "";
+  const s = (value: any) => (value == null ? "" : String(value));
+  const phoneRaw = s(row["Telefon"]).trim();
   const phoneE164 = normalizePhone(phoneRaw);
   if (!phoneE164) {
     issues.push({
@@ -99,31 +100,32 @@ export function mapRow(row: CsvRow, rowIndex: number): {
 
   const contact: NormalizedContact | null = phoneE164
     ? {
-        gender: row["Geschlecht"] || null,
-        first_name: row["Vorname"] || null,
-        last_name: row["Nachname"] || null,
+        gender: s(row["Geschlecht"]) || null,
+        first_name: s(row["Vorname"]) || null,
+        last_name: s(row["Nachname"]) || null,
         phone_raw: phoneRaw || null,
         phone_e164: phoneE164,
-        email: row["E-Mail-Adresse"] || null,
-        telegram: row["Telegram Account"] || null,
-        source_origin: row["Herkunft"] || null,
-        form_size: row["Formular | Größe Tattoo"] || null,
-        artist_booking: row["Buchung bei Artist"] || null,
-        created_in_system_at: parseOptionalDateTime(row["Datum Eintragung"] || "") ?? null,
-        date_erstgespraech: parseOptionalDate(row["Datum Erstgespräch"] || "") ?? null,
-        date_tattoo_termin: parseOptionalDate(row["Datum Tattoo-Termin"] || "") ?? null,
-        price_deposit_cents: row["Preis | Anzahlung"]
-          ? parseEuroCents(row["Preis | Anzahlung"])
+        email: s(row["E-Mail-Adresse"]) || null,
+        telegram: s(row["Telegram Account"]) || null,
+        source_origin: s(row["Herkunft"]) || null,
+        form_size: s(row["Formular | Größe Tattoo"]) || null,
+        artist_booking: s(row["Buchung bei Artist"]) || null,
+        created_in_system_at: parseOptionalDateTime(s(row["Datum Eintragung"])) ?? null,
+        date_erstgespraech: parseOptionalDate(s(row["Datum Erstgespräch"])) ?? null,
+        date_tattoo_termin: parseOptionalDate(s(row["Datum Tattoo-Termin"])) ?? null,
+        price_deposit_cents: s(row["Preis | Anzahlung"])
+          ? parseEuroCents(s(row["Preis | Anzahlung"]))
           : null,
-        price_total_cents: row["Preis | Gesamt"]
-          ? parseEuroCents(row["Preis | Gesamt"])
+        price_total_cents: s(row["Preis | Gesamt"])
+          ? parseEuroCents(s(row["Preis | Gesamt"]))
           : null,
-        last_sent_at: parseOptionalDateTime(row["Zuletzt gesendete Nachricht am"] || "") ?? null,
+        last_sent_at:
+          parseOptionalDateTime(s(row["Zuletzt gesendete Nachricht am"])) ?? null,
         last_received_at:
-          parseOptionalDateTime(row["Zuletzt empfangene Nachricht am"] || "") ?? null,
-        location_name: row["Standort"] || null,
-        labels: row["Labels"]
-          ? row["Labels"]
+          parseOptionalDateTime(s(row["Zuletzt empfangene Nachricht am"])) ?? null,
+        location_name: s(row["Standort"]) || null,
+        labels: s(row["Labels"])
+          ? s(row["Labels"])
               .split(labelSplitRegex)
               .map((label) => label.trim())
               .filter(Boolean)
