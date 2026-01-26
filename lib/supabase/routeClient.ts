@@ -8,5 +8,5 @@ export function createRouteClient() {
   if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL is missing");
   if (!key) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is missing");
 
-  return createRouteHandlerClient({ cookies, supabaseUrl: url, supabaseKey: key });
+  return createRouteHandlerClient({ cookies });
 }
