@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/browserClient";
+import { AppShell } from "@/components/app-shell";
 import { Button, Chip, Input, Textarea } from "@/components/ui";
-import { computeSystemLabels } from "@/lib/import-utils";
 
 export default function ContactDetailPage() {
   const supabase = useMemo(() => createBrowserClient(), []);
@@ -19,7 +19,7 @@ export default function ContactDetailPage() {
       const { data } = await supabase
         .from("contacts")
         .select(
-          "*, location:locations(name), labels:contact_labels(labels(name)), tasks:tasks(*)"
+          "*, location:locations(name), labels:contact_labels(labels(id,name)), tasks:tasks(*)"
         )
         .eq("id", params.id)
         .single();
@@ -38,18 +38,9 @@ export default function ContactDetailPage() {
     return <div className="p-8 text-text-muted">Lade Kontakt...</div>;
   }
 
-  const labels = (contact.labels || []).map((item: any) => item.labels?.name).filter(Boolean);
-  const hasDueTask = (contact.tasks || []).some(
-    (task: any) => task.status === "offen" && new Date(task.due_at) <= new Date()
-  );
-  const systemLabels = computeSystemLabels({
-    date_erstgespraech: contact.date_erstgespraech,
-    date_tattoo_termin: contact.date_tattoo_termin,
-    price_deposit_cents: contact.price_deposit_cents,
-    price_total_cents: contact.price_total_cents,
-    has_due_task: hasDueTask,
-    last_activity_at: contact.last_received_at || contact.last_sent_at || contact.updated_at
-  });
+  const labels = (contact.labels || [])
+    .map((item: any) => item.labels)
+    .filter(Boolean);
 
   const selectedTemplateBody =
     templates.find((template) => template.id === selectedTemplate)?.body ?? "";
@@ -59,30 +50,7 @@ export default function ContactDetailPage() {
     .replaceAll("{telefon}", contact.phone_e164 ?? "");
 
   return (
-    <div className="min-h-screen px-8 py-10">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{contact.full_name || "Kontakt"}</h1>
-          <p className="text-sm text-text-muted">{contact.location?.name ?? "-"}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => navigator.clipboard.writeText(contact.phone_e164)}
-          >
-            Nummer kopieren
-          </Button>
-          {contact.email ? (
-            <Button
-              variant="outline"
-              onClick={() => navigator.clipboard.writeText(contact.email)}
-            >
-              E-Mail kopieren
-            </Button>
-          ) : null}
-        </div>
-      </header>
-
+    <AppShell title={contact.full_name || "Kontakt"} subtitle={contact.location?.name ?? "-"}>
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="space-y-4 rounded-lg border border-base-800 bg-base-850 p-4 lg:col-span-2">
           <h2 className="text-lg font-semibold">Details</h2>
@@ -105,17 +73,13 @@ export default function ContactDetailPage() {
 
         <section className="space-y-4 rounded-lg border border-base-800 bg-base-850 p-4">
           <div>
-            <h2 className="text-lg font-semibold">Systemlabels</h2>
+            <h2 className="text-lg font-semibold">Labels</h2>
             <div className="mt-2 flex flex-wrap gap-2">
-              {systemLabels.map((label) => (
-                <Chip key={label} label={label} selected />
-              ))}
-            </div>
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold">Freie Labels</h2>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {labels.length ? labels.map((label: string) => <Chip key={label} label={label} />) : (
+              {labels.length ? (
+                labels.map((label: { id: string; name: string }) => (
+                  <Chip key={label.id} label={label.name} />
+                ))
+              ) : (
                 <span className="text-sm text-text-muted">Keine Labels</span>
               )}
             </div>
@@ -143,8 +107,24 @@ export default function ContactDetailPage() {
               Text kopieren
             </Button>
           </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => navigator.clipboard.writeText(contact.phone_e164)}
+            >
+              Nummer kopieren
+            </Button>
+            {contact.email ? (
+              <Button
+                variant="outline"
+                onClick={() => navigator.clipboard.writeText(contact.email)}
+              >
+                E-Mail kopieren
+              </Button>
+            ) : null}
+          </div>
         </section>
       </div>
-    </div>
+    </AppShell>
   );
 }

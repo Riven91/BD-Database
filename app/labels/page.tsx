@@ -2,76 +2,157 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/browserClient";
+import { AppShell } from "@/components/app-shell";
 import { Button, Input } from "@/components/ui";
+
+type Label = {
+  id: string;
+  name: string;
+  sort_order: number;
+  is_archived: boolean;
+};
 
 export default function LabelsPage() {
   const supabase = useMemo(() => createBrowserClient(), []);
-  const [labels, setLabels] = useState<any[]>([]);
+  const [labels, setLabels] = useState<Label[]>([]);
   const [newLabel, setNewLabel] = useState("");
+  const [newSortOrder, setNewSortOrder] = useState("1000");
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const loadLabels = async () => {
+    const response = await fetch("/api/labels?includeArchived=true");
+    if (!response.ok) return;
+    const payload = await response.json();
+    setLabels(payload.labels ?? []);
+  };
+
+  const loadProfile = async () => {
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) return;
     const { data } = await supabase
-      .from("labels")
-      .select("id, name, is_archived")
-      .order("name");
-    setLabels(data ?? []);
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+    setIsAdmin(data?.role === "admin");
   };
 
   useEffect(() => {
     loadLabels();
+    loadProfile();
   }, []);
 
   const handleCreate = async () => {
     if (!newLabel.trim()) return;
-    await supabase.from("labels").insert({ name: newLabel.trim() });
+    const sortOrder = Number.isNaN(Number(newSortOrder)) ? 1000 : Number(newSortOrder);
+    await fetch("/api/labels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newLabel.trim(), sort_order: sortOrder })
+    });
     setNewLabel("");
+    setNewSortOrder("1000");
     loadLabels();
   };
 
-  const toggleArchive = async (labelId: string, nextState: boolean) => {
-    await supabase
-      .from("labels")
-      .update({ is_archived: nextState })
-      .eq("id", labelId);
+  const updateLabel = async (labelId: string, updates: Partial<Label>) => {
+    await fetch(`/api/labels/${labelId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates)
+    });
     loadLabels();
   };
 
   return (
-    <div className="min-h-screen px-8 py-10">
-      <header className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Labels</h1>
-          <p className="text-sm text-text-muted">Admin Verwaltung</p>
+    <AppShell title="Labels" subtitle="Admin Verwaltung">
+      {isAdmin ? (
+        <div className="mb-6 flex flex-wrap gap-2">
+          <Input
+            placeholder="Neues Label"
+            value={newLabel}
+            onChange={(event) => setNewLabel(event.target.value)}
+          />
+          <Input
+            placeholder="Sortierung"
+            value={newSortOrder}
+            onChange={(event) => setNewSortOrder(event.target.value)}
+            type="number"
+          />
+          <Button variant="primary" onClick={handleCreate}>
+            Anlegen
+          </Button>
         </div>
-      </header>
-
-      <div className="mb-6 flex gap-2">
-        <Input
-          placeholder="Neues Label"
-          value={newLabel}
-          onChange={(event) => setNewLabel(event.target.value)}
-        />
-        <Button variant="primary" onClick={handleCreate}>
-          Anlegen
-        </Button>
-      </div>
+      ) : (
+        <p className="mb-6 text-sm text-text-muted">
+          Nur Admins können Labels verwalten. Du kannst Labels im Dashboard zuweisen.
+        </p>
+      )}
 
       <div className="space-y-2">
         {labels.map((label) => (
           <div
             key={label.id}
-            className="flex items-center justify-between rounded-md border border-base-800 bg-base-850 px-4 py-3"
+            className="flex flex-wrap items-center gap-3 rounded-md border border-base-800 bg-base-850 px-4 py-3"
           >
-            <span>{label.name}</span>
-            <Button
-              variant="outline"
-              onClick={() => toggleArchive(label.id, !label.is_archived)}
-            >
-              {label.is_archived ? "Reaktivieren" : "Archivieren"}
-            </Button>
+            <Input
+              value={label.name}
+              onChange={(event) =>
+                setLabels((prev) =>
+                  prev.map((item) =>
+                    item.id === label.id
+                      ? { ...item, name: event.target.value }
+                      : item
+                  )
+                )
+              }
+              disabled={!isAdmin}
+              className="max-w-xs"
+            />
+            <Input
+              value={String(label.sort_order)}
+              onChange={(event) =>
+                setLabels((prev) =>
+                  prev.map((item) =>
+                    item.id === label.id
+                      ? { ...item, sort_order: Number(event.target.value) }
+                      : item
+                  )
+                )
+              }
+              type="number"
+              disabled={!isAdmin}
+              className="w-32"
+            />
+            {isAdmin ? (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  updateLabel(label.id, {
+                    name: label.name.trim(),
+                    sort_order: label.sort_order,
+                    is_archived: label.is_archived
+                  })
+                }
+              >
+                Speichern
+              </Button>
+            ) : null}
+            {isAdmin ? (
+              <Button
+                variant="outline"
+                onClick={() => updateLabel(label.id, { is_archived: !label.is_archived })}
+              >
+                {label.is_archived ? "Reaktivieren" : "Archivieren"}
+              </Button>
+            ) : (
+              <span className="text-xs text-text-muted">
+                {label.is_archived ? "Archiviert" : "Aktiv"}
+              </span>
+            )}
           </div>
         ))}
       </div>
-    </div>
+    </AppShell>
   );
 }

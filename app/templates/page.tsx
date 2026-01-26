@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@/lib/supabase/browserClient";
+import { AppShell } from "@/components/app-shell";
 import { Button, Input, Textarea } from "@/components/ui";
 
 export default function TemplatesPage() {
@@ -42,12 +43,7 @@ export default function TemplatesPage() {
   };
 
   return (
-    <div className="min-h-screen px-8 py-10">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold">Templates</h1>
-        <p className="text-sm text-text-muted">Copy/Paste Vorlagen</p>
-      </header>
-
+    <AppShell title="Templates" subtitle="Copy/Paste Vorlagen">
       <section className="mb-6 space-y-3 rounded-lg border border-base-800 bg-base-850 p-4">
         <Input
           placeholder="Titel"
@@ -73,7 +69,9 @@ export default function TemplatesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold">{template.title}</h3>
-                <p className="text-sm text-text-muted whitespace-pre-line">{template.body}</p>
+                <p className="text-sm text-text-muted whitespace-pre-line">
+                  {template.body}
+                </p>
               </div>
               <Button
                 variant="outline"
@@ -85,6 +83,6 @@ export default function TemplatesPage() {
           </div>
         ))}
       </div>
-    </div>
+    </AppShell>
   );
 }
