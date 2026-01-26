@@ -1,93 +1,80 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { createBrowserClient } from "@/lib/supabase/browserClient";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button, Input } from "@/components/ui";
 
 type Label = {
   id: string;
   name: string;
-  sort_order: number;
   is_archived: boolean;
 };
 
 export default function LabelsPage() {
-  const supabase = useMemo(() => createBrowserClient(), []);
   const [labels, setLabels] = useState<Label[]>([]);
   const [newLabel, setNewLabel] = useState("");
-  const [newSortOrder, setNewSortOrder] = useState("1000");
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadLabels = async () => {
+    setError(null);
     const response = await fetch("/api/labels?includeArchived=true");
-    if (!response.ok) return;
+    if (!response.ok) {
+      setError("Labels konnten nicht geladen werden.");
+      return;
+    }
     const payload = await response.json();
     setLabels(payload.labels ?? []);
   };
 
-  const loadProfile = async () => {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) return;
-    const { data } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", authData.user.id)
-      .maybeSingle();
-    setIsAdmin(data?.role === "admin");
-  };
-
   useEffect(() => {
     loadLabels();
-    loadProfile();
   }, []);
 
   const handleCreate = async () => {
     if (!newLabel.trim()) return;
-    const sortOrder = Number.isNaN(Number(newSortOrder)) ? 1000 : Number(newSortOrder);
-    await fetch("/api/labels", {
+    setError(null);
+    const response = await fetch("/api/labels", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newLabel.trim(), sort_order: sortOrder })
+      body: JSON.stringify({ name: newLabel.trim() })
     });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({ error: "Label konnte nicht angelegt werden." }));
+      setError(payload.error ?? "Label konnte nicht angelegt werden.");
+      return;
+    }
     setNewLabel("");
-    setNewSortOrder("1000");
     loadLabels();
   };
 
   const updateLabel = async (labelId: string, updates: Partial<Label>) => {
-    await fetch(`/api/labels/${labelId}`, {
+    setError(null);
+    const response = await fetch(`/api/labels/${labelId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates)
     });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({ error: "Label konnte nicht gespeichert werden." }));
+      setError(payload.error ?? "Label konnte nicht gespeichert werden.");
+      return;
+    }
     loadLabels();
   };
 
   return (
-    <AppShell title="Labels" subtitle="Admin Verwaltung">
-      {isAdmin ? (
-        <div className="mb-6 flex flex-wrap gap-2">
-          <Input
-            placeholder="Neues Label"
-            value={newLabel}
-            onChange={(event) => setNewLabel(event.target.value)}
-          />
-          <Input
-            placeholder="Sortierung"
-            value={newSortOrder}
-            onChange={(event) => setNewSortOrder(event.target.value)}
-            type="number"
-          />
-          <Button variant="primary" onClick={handleCreate}>
-            Anlegen
-          </Button>
-        </div>
-      ) : (
-        <p className="mb-6 text-sm text-text-muted">
-          Nur Admins können Labels verwalten. Du kannst Labels im Dashboard zuweisen.
-        </p>
-      )}
+    <AppShell title="Labels" subtitle="Labelverwaltung">
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Input
+          placeholder="Neues Label"
+          value={newLabel}
+          onChange={(event) => setNewLabel(event.target.value)}
+        />
+        <Button variant="primary" type="button" onClick={handleCreate}>
+          Anlegen
+        </Button>
+      </div>
+      {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
 
       <div className="space-y-2">
         {labels.map((label) => (
@@ -106,52 +93,33 @@ export default function LabelsPage() {
                   )
                 )
               }
-              disabled={!isAdmin}
               className="max-w-xs"
             />
-            <Input
-              value={String(label.sort_order)}
-              onChange={(event) =>
-                setLabels((prev) =>
-                  prev.map((item) =>
-                    item.id === label.id
-                      ? { ...item, sort_order: Number(event.target.value) }
-                      : item
-                  )
-                )
+            <Button
+              variant="outline"
+              onClick={() =>
+                updateLabel(label.id, {
+                  name: label.name.trim(),
+                  is_archived: label.is_archived
+                })
               }
-              type="number"
-              disabled={!isAdmin}
-              className="w-32"
-            />
-            {isAdmin ? (
-              <Button
-                variant="outline"
-                onClick={() =>
-                  updateLabel(label.id, {
-                    name: label.name.trim(),
-                    sort_order: label.sort_order,
-                    is_archived: label.is_archived
-                  })
-                }
-              >
-                Speichern
-              </Button>
-            ) : null}
-            {isAdmin ? (
-              <Button
-                variant="outline"
-                onClick={() => updateLabel(label.id, { is_archived: !label.is_archived })}
-              >
-                {label.is_archived ? "Reaktivieren" : "Archivieren"}
-              </Button>
-            ) : (
-              <span className="text-xs text-text-muted">
-                {label.is_archived ? "Archiviert" : "Aktiv"}
-              </span>
-            )}
+            >
+              Speichern
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => updateLabel(label.id, { is_archived: !label.is_archived })}
+            >
+              {label.is_archived ? "Reaktivieren" : "Archivieren"}
+            </Button>
+            <span className="text-xs text-text-muted">
+              {label.is_archived ? "Archiviert" : "Aktiv"}
+            </span>
           </div>
         ))}
+        {labels.length === 0 ? (
+          <p className="text-sm text-text-muted">Noch keine Labels vorhanden.</p>
+        ) : null}
       </div>
     </AppShell>
   );

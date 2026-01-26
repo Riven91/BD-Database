@@ -26,6 +26,14 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
+    const profileResponse = await fetch("/api/profile", { method: "POST" });
+    if (profileResponse.ok) {
+      const payload = await profileResponse.json();
+      if (!payload.profile?.location_id) {
+        router.push("/onboarding");
+        return;
+      }
+    }
     router.push("/");
   };
 

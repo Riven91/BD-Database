@@ -20,6 +20,7 @@ export type NormalizedContact = {
   last_received_at?: string | null;
   location_name?: string | null;
   labels?: string[];
+  source_row?: number;
 };
 
 export type ImportIssue = {
@@ -34,7 +35,22 @@ export function normalizePhone(raw: string): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  let digits = trimmed.replace(/[^\d+]/g, "");
+  if (/[eE]\+/.test(trimmed)) {
+    return null;
+  }
+  let sanitized = trimmed;
+  if (sanitized.endsWith(".0")) {
+    sanitized = sanitized.slice(0, -2);
+  }
+  let digits = sanitized.replace(/[^\d+]/g, "");
+  const hasKnownPrefix =
+    digits.startsWith("+") ||
+    digits.startsWith("00") ||
+    digits.startsWith("0") ||
+    digits.startsWith("49");
+  if (!hasKnownPrefix) {
+    return null;
+  }
   if (digits.startsWith("00")) {
     digits = `+${digits.slice(2)}`;
   }
@@ -91,10 +107,13 @@ export function mapRow(row: CsvRow, rowIndex: number): {
   const phoneRaw = s(row["Telefon"]).trim();
   const phoneE164 = normalizePhone(phoneRaw);
   if (!phoneE164) {
+    const scientific = /[eE]\+/.test(phoneRaw);
     issues.push({
       row: rowIndex,
       field: "Telefon",
-      message: "Telefonnummer nicht gültig"
+      message: scientific
+        ? "Excel-Notation erkannt (E+). Bitte Spalte als Text formatieren."
+        : "Telefonnummer nicht gültig"
     });
   }
 
@@ -129,7 +148,8 @@ export function mapRow(row: CsvRow, rowIndex: number): {
               .split(labelSplitRegex)
               .map((label) => label.trim())
               .filter(Boolean)
-          : []
+          : [],
+        source_row: rowIndex
       }
     : null;
 

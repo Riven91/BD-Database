@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui";
@@ -16,21 +17,38 @@ type PreviewRow = {
   rowNumber: number;
   name: string;
   phone: string;
+  phoneE164: string;
   location: string;
   labels: string;
   isValid: boolean;
 };
 
 export default function ImportPage() {
+  const router = useRouter();
   const [previewContacts, setPreviewContacts] = useState<NormalizedContact[]>([]);
   const [previewStats, setPreviewStats] = useState<PreviewStats | null>(null);
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    created: number;
+    updated: number;
+    skipped: number;
+    errorCount: number;
+    topErrors: {
+      rowIndex?: number;
+      reason: string;
+      phoneRaw?: string | null;
+      phoneE164?: string;
+      location?: string | null;
+      details?: string;
+    }[];
+  } | null>(null);
 
   const handleFile = async (file: File) => {
     setPreviewStats(null);
     setPreviewContacts([]);
     setPreviewRows([]);
+    setImportResult(null);
 
     const isCsv = file.name.toLowerCase().endsWith(".csv");
     const data = isCsv ? await file.text() : await file.arrayBuffer();
@@ -63,6 +81,7 @@ export default function ImportPage() {
         rowNumber,
         name: [row["Vorname"], row["Nachname"]].filter(Boolean).join(" ").trim(),
         phone: row["Telefon"] ?? "",
+        phoneE164: contact?.phone_e164 ?? "",
         location: row["Standort"] ?? "",
         labels: row["Labels"] ?? "",
         isValid: Boolean(contact)
@@ -88,11 +107,24 @@ export default function ImportPage() {
 
   const handleConfirm = async () => {
     setIsImporting(true);
-    await fetch("/api/import/confirm", {
+    const response = await fetch("/api/import/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contacts: previewContacts })
     });
+    if (response.ok) {
+      const payload = await response.json();
+      setImportResult(payload);
+      router.refresh();
+    } else {
+      setImportResult({
+        created: 0,
+        updated: 0,
+        skipped: previewContacts.length,
+        errorCount: 1,
+        topErrors: [{ reason: "Import fehlgeschlagen" }]
+      });
+    }
     setIsImporting(false);
   };
 
@@ -101,6 +133,7 @@ export default function ImportPage() {
       <section className="rounded-lg border border-base-800 bg-base-850 p-4">
         <input
           type="file"
+          multiple={false}
           accept=".csv,.xlsx,.xls"
           onChange={(event) => {
             const file = event.target.files?.[0];
@@ -164,6 +197,41 @@ export default function ImportPage() {
           >
             {isImporting ? "Import läuft..." : "Import bestätigen"}
           </Button>
+          {importResult ? (
+            <div className="rounded-md border border-base-800 bg-base-900/60 p-3 text-sm">
+              <div>
+                Import fertig: {importResult.created} neu, {importResult.updated}{" "}
+                aktualisiert, {importResult.skipped} übersprungen
+              </div>
+              {importResult.errorCount ? (
+                <ul className="mt-2 text-red-400">
+                  {importResult.topErrors.map((issue, index) => (
+                    <li
+                      key={`${issue.rowIndex ?? issue.phoneE164 ?? "row"}-${index}`}
+                    >
+                      {issue.rowIndex ? `Zeile ${issue.rowIndex}: ` : ""}
+                      {issue.reason}
+                      {issue.phoneRaw ? ` | raw: ${issue.phoneRaw}` : ""}
+                      {issue.phoneE164 ? ` | e164: ${issue.phoneE164}` : ""}
+                      {issue.location ? ` | Standort: ${issue.location}` : ""}
+                      {issue.details ? ` | ${issue.details}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="rounded-md border border-base-800 bg-base-900/60 p-3 text-sm">
+            <div className="mb-2 font-semibold">Telefon-Check (erste 20 Zeilen)</div>
+            <ul className="space-y-1 text-xs text-text-muted">
+              {previewRows.slice(0, 20).map((row) => (
+                <li key={`phone-${row.rowNumber}`}>
+                  Zeile {row.rowNumber}: {row.phone || "-"} →{" "}
+                  {row.phoneE164 || "ungültig"}
+                </li>
+              ))}
+            </ul>
+          </div>
         </section>
       ) : null}
     </AppShell>
