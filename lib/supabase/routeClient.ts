@@ -1,5 +1,4 @@
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@supabase/supabase-js";
 
 export function createRouteClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -8,5 +7,5 @@ export function createRouteClient() {
   if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL is missing");
   if (!key) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is missing");
 
-  return createRouteHandlerClient({ cookies, supabaseUrl: url, supabaseKey: key });
+  return createClient(url, key);
 }
