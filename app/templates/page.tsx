@@ -16,15 +16,10 @@ export default function TemplatesPage() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const loadTemplates = async () => {
-    setError(null);
     const response = await fetch("/api/templates");
-    if (!response.ok) {
-      setError("Templates konnten nicht geladen werden.");
-      return;
-    }
+    if (!response.ok) return;
     const payload = await response.json();
     setTemplates(payload.templates ?? []);
   };
@@ -35,27 +30,18 @@ export default function TemplatesPage() {
 
   const handleSubmit = async () => {
     if (!title.trim() || !body.trim()) return;
-    setError(null);
-    let response: Response;
     if (editingId) {
-      response = await fetch(`/api/templates/${editingId}`, {
+      await fetch(`/api/templates/${editingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: title.trim(), body: body.trim() })
       });
     } else {
-      response = await fetch("/api/templates", {
+      await fetch("/api/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: title.trim(), body: body.trim() })
       });
-    }
-    if (!response.ok) {
-      const payload = await response
-        .json()
-        .catch(() => ({ error: "Template konnte nicht gespeichert werden." }));
-      setError(payload.error ?? "Template konnte nicht gespeichert werden.");
-      return;
     }
     setTitle("");
     setBody("");
@@ -64,32 +50,16 @@ export default function TemplatesPage() {
   };
 
   const toggleArchive = async (templateId: string, nextState: boolean) => {
-    setError(null);
-    const response = await fetch(`/api/templates/${templateId}`, {
+    await fetch(`/api/templates/${templateId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ is_archived: nextState })
     });
-    if (!response.ok) {
-      const payload = await response
-        .json()
-        .catch(() => ({ error: "Template konnte nicht gespeichert werden." }));
-      setError(payload.error ?? "Template konnte nicht gespeichert werden.");
-      return;
-    }
     loadTemplates();
   };
 
   const handleDelete = async (templateId: string) => {
-    setError(null);
-    const response = await fetch(`/api/templates/${templateId}`, { method: "DELETE" });
-    if (!response.ok) {
-      const payload = await response
-        .json()
-        .catch(() => ({ error: "Template konnte nicht gelöscht werden." }));
-      setError(payload.error ?? "Template konnte nicht gelöscht werden.");
-      return;
-    }
+    await fetch(`/api/templates/${templateId}`, { method: "DELETE" });
     if (editingId === templateId) {
       setEditingId(null);
       setTitle("");

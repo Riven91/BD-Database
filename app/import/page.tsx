@@ -33,15 +33,7 @@ export default function ImportPage() {
     created: number;
     updated: number;
     skipped: number;
-    errorCount: number;
-    topErrors: {
-      rowIndex?: number;
-      reason: string;
-      phoneRaw?: string | null;
-      phoneE164?: string;
-      location?: string | null;
-      details?: string;
-    }[];
+    errors: { row?: number; phone?: string; message: string }[];
   } | null>(null);
 
   const handleFile = async (file: File) => {
@@ -121,8 +113,7 @@ export default function ImportPage() {
         created: 0,
         updated: 0,
         skipped: previewContacts.length,
-        errorCount: 1,
-        topErrors: [{ reason: "Import fehlgeschlagen" }]
+        errors: [{ message: "Import fehlgeschlagen" }]
       });
     }
     setIsImporting(false);
@@ -203,35 +194,19 @@ export default function ImportPage() {
                 Import fertig: {importResult.created} neu, {importResult.updated}{" "}
                 aktualisiert, {importResult.skipped} übersprungen
               </div>
-              {importResult.errorCount ? (
+              {importResult.errors?.length ? (
                 <ul className="mt-2 text-red-400">
-                  {importResult.topErrors.map((issue, index) => (
-                    <li
-                      key={`${issue.rowIndex ?? issue.phoneE164 ?? "row"}-${index}`}
-                    >
-                      {issue.rowIndex ? `Zeile ${issue.rowIndex}: ` : ""}
-                      {issue.reason}
-                      {issue.phoneRaw ? ` | raw: ${issue.phoneRaw}` : ""}
-                      {issue.phoneE164 ? ` | e164: ${issue.phoneE164}` : ""}
-                      {issue.location ? ` | Standort: ${issue.location}` : ""}
-                      {issue.details ? ` | ${issue.details}` : ""}
+                  {importResult.errors.slice(0, 10).map((issue, index) => (
+                    <li key={`${issue.row ?? issue.phone ?? "row"}-${index}`}>
+                      {issue.row ? `Zeile ${issue.row}: ` : ""}
+                      {issue.phone ? `${issue.phone} - ` : ""}
+                      {issue.message}
                     </li>
                   ))}
                 </ul>
               ) : null}
             </div>
           ) : null}
-          <div className="rounded-md border border-base-800 bg-base-900/60 p-3 text-sm">
-            <div className="mb-2 font-semibold">Telefon-Check (erste 20 Zeilen)</div>
-            <ul className="space-y-1 text-xs text-text-muted">
-              {previewRows.slice(0, 20).map((row) => (
-                <li key={`phone-${row.rowNumber}`}>
-                  Zeile {row.rowNumber}: {row.phone || "-"} →{" "}
-                  {row.phoneE164 || "ungültig"}
-                </li>
-              ))}
-            </ul>
-          </div>
         </section>
       ) : null}
     </AppShell>

@@ -13,7 +13,7 @@ type Label = {
 export default function LabelsPage() {
   const [labels, setLabels] = useState<Label[]>([]);
   const [newLabel, setNewLabel] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [newSortOrder, setNewSortOrder] = useState("1000");
 
   const loadLabels = async () => {
     setError(null);
@@ -70,11 +70,16 @@ export default function LabelsPage() {
           value={newLabel}
           onChange={(event) => setNewLabel(event.target.value)}
         />
-        <Button variant="primary" type="button" onClick={handleCreate}>
+        <Input
+          placeholder="Sortierung"
+          value={newSortOrder}
+          onChange={(event) => setNewSortOrder(event.target.value)}
+          type="number"
+        />
+        <Button variant="primary" onClick={handleCreate}>
           Anlegen
         </Button>
       </div>
-      {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
 
       <div className="space-y-2">
         {labels.map((label) => (
@@ -103,6 +108,18 @@ export default function LabelsPage() {
                   is_archived: label.is_archived
                 })
               }
+              type="number"
+              className="w-32"
+            />
+            <Button
+              variant="outline"
+              onClick={() =>
+                updateLabel(label.id, {
+                  name: label.name.trim(),
+                  sort_order: label.sort_order,
+                  is_archived: label.is_archived
+                })
+              }
             >
               Speichern
             </Button>
@@ -112,9 +129,6 @@ export default function LabelsPage() {
             >
               {label.is_archived ? "Reaktivieren" : "Archivieren"}
             </Button>
-            <span className="text-xs text-text-muted">
-              {label.is_archived ? "Archiviert" : "Aktiv"}
-            </span>
           </div>
         ))}
         {labels.length === 0 ? (

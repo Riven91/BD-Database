@@ -48,13 +48,7 @@ export async function POST(request: Request) {
   const body = await request.json();
   const contacts: NormalizedContact[] = body.contacts ?? [];
   if (!contacts.length) {
-    return NextResponse.json({
-      created: 0,
-      updated: 0,
-      skipped: 0,
-      errorCount: 0,
-      topErrors: []
-    });
+    return NextResponse.json({ created: 0, updated: 0, skipped: 0, errors: [] });
   }
 
   const locationMap = await getLocations(supabase);
@@ -62,14 +56,7 @@ export async function POST(request: Request) {
   let created = 0;
   let updated = 0;
   let skipped = 0;
-  const errors: {
-    rowIndex?: number;
-    reason: string;
-    phoneRaw?: string | null;
-    phoneE164?: string;
-    location?: string | null;
-    details?: string;
-  }[] = [];
+  const errors: { row?: number; phone?: string; message: string }[] = [];
 
   for (const contact of contacts) {
     const row = contact.source_row;
@@ -83,14 +70,8 @@ export async function POST(request: Request) {
         .select("id, name, is_admin_only")
         .single();
       if (error) {
-        errors.push({
-          rowIndex: row,
-          reason: "Standort konnte nicht erstellt werden",
-          phoneRaw: contact.phone_raw,
-          phoneE164: contact.phone_e164,
-          location: locationName,
-          details: error.message
-        });
+        errors.push({ row, phone: contact.phone_e164, message: error.message });
+        skipped += 1;
         continue;
       }
       locationMap.set(newLocation.name.toLowerCase(), {
@@ -102,12 +83,11 @@ export async function POST(request: Request) {
     const resolvedLocation = locationMap.get(locationKey);
     if (!resolvedLocation) {
       errors.push({
-        rowIndex: row,
-        reason: "Standort nicht gefunden",
-        phoneRaw: contact.phone_raw,
-        phoneE164: contact.phone_e164,
-        location: locationName
+        row,
+        phone: contact.phone_e164,
+        message: `Standort ${locationName} nicht gefunden`
       });
+      skipped += 1;
       continue;
     }
 
@@ -118,14 +98,8 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (existingError) {
-      errors.push({
-        rowIndex: row,
-        reason: "Kontaktprüfung fehlgeschlagen",
-        phoneRaw: contact.phone_raw,
-        phoneE164: contact.phone_e164,
-        location: locationName,
-        details: existingError.message
-      });
+      errors.push({ row, phone: contact.phone_e164, message: existingError.message });
+      skipped += 1;
       continue;
     }
 
@@ -140,14 +114,8 @@ export async function POST(request: Request) {
       .single();
 
     if (upsertError) {
-      errors.push({
-        rowIndex: row,
-        reason: "Kontakt konnte nicht gespeichert werden",
-        phoneRaw: contact.phone_raw,
-        phoneE164: contact.phone_e164,
-        location: locationName,
-        details: upsertError.message
-      });
+      errors.push({ row, phone: contact.phone_e164, message: upsertError.message });
+      skipped += 1;
       continue;
     }
 
@@ -164,14 +132,7 @@ export async function POST(request: Request) {
         .eq("phone_e164", contact.phone_e164)
         .single();
       if (contactError) {
-        errors.push({
-          rowIndex: row,
-          reason: "Kontakt konnte nicht geladen werden",
-          phoneRaw: contact.phone_raw,
-          phoneE164: contact.phone_e164,
-          location: locationName,
-          details: contactError.message
-        });
+        errors.push({ row, phone: contact.phone_e164, message: contactError.message });
         continue;
       }
       for (const label of contact.labels) {
@@ -185,12 +146,9 @@ export async function POST(request: Request) {
             .single();
           if (labelError || !createdLabel) {
             errors.push({
-              rowIndex: row,
-              reason: "Label konnte nicht erstellt werden",
-              phoneRaw: contact.phone_raw,
-              phoneE164: contact.phone_e164,
-              location: locationName,
-              details: labelError?.message ?? "Unbekannter Fehler"
+              row,
+              phone: contact.phone_e164,
+              message: labelError?.message ?? "Label konnte nicht erstellt werden"
             });
             continue;
           }
@@ -202,12 +160,9 @@ export async function POST(request: Request) {
           .upsert({ contact_id: contactRow.id, label_id: labelId });
         if (linkError) {
           errors.push({
-            rowIndex: row,
-            reason: "Label konnte nicht zugewiesen werden",
-            phoneRaw: contact.phone_raw,
-            phoneE164: contact.phone_e164,
-            location: locationName,
-            details: linkError.message
+            row,
+            phone: contact.phone_e164,
+            message: linkError.message
           });
         }
       }
@@ -218,7 +173,6 @@ export async function POST(request: Request) {
     created,
     updated,
     skipped,
-    errorCount: errors.length,
-    topErrors: errors.slice(0, 10)
+    errors: errors.slice(0, 10)
   });
 }
