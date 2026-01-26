@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-base-950 text-text-base;
+}
+
+input, select, textarea {
+  @apply bg-base-900 border border-base-800 text-text-base;
+}
+
+button {
+  @apply rounded-md;
+}
