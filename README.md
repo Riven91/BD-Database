@@ -14,7 +14,6 @@ Lege eine `.env.local` an:
 ```
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
 ### 3) App starten
@@ -26,7 +25,8 @@ npm run dev
 ## Import Hinweise
 - Der Import erwartet die Datei `blood_d_kontakte_dedupe_nach_standort.csv` (clientseitig uploaden).
 - Preview zeigt neue Kontakte, Updates und Fehler (z.B. ungültige Telefonnummern).
-- Import läuft serverseitig über den Service Role Key, UI bleibt per RLS geschützt.
+- Import läuft serverseitig mit einem user-scoped Supabase Client und erfordert `profiles.role = 'admin'`.
+- RLS schützt weiterhin alle Datenzugriffe.
 
 ## Seiten
 - `/login` – Supabase Auth (Email + Passwort)
