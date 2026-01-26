@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createSupabaseBrowserClient } from "@/src/lib/supabase/client";
+import { createBrowserClient } from "@/lib/supabase/browserClient";
 import { Button, Input } from "@/components/ui";
 
 export default function LabelsPage() {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const supabase = useMemo(() => createBrowserClient(), []);
   const [labels, setLabels] = useState<any[]>([]);
   const [newLabel, setNewLabel] = useState("");
 

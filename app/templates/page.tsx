@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createSupabaseBrowserClient } from "@/src/lib/supabase/client";
+import { createBrowserClient } from "@/lib/supabase/browserClient";
 import { Button, Input, Textarea } from "@/components/ui";
 
 export default function TemplatesPage() {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const supabase = useMemo(() => createBrowserClient(), []);
   const [templates, setTemplates] = useState<any[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");

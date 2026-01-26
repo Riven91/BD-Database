@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createSupabaseBrowserClient } from "@/src/lib/supabase/client";
+import { createBrowserClient } from "@/lib/supabase/browserClient";
 import { Button, Chip, Input } from "@/components/ui";
 import { computeSystemLabels } from "@/lib/import-utils";
 
@@ -16,7 +16,7 @@ const systemLabelOptions = [
 ];
 
 export default function DashboardPage() {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const supabase = useMemo(() => createBrowserClient(), []);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [systemFilters, setSystemFilters] = useState<string[]>([]);
