@@ -1,5 +1,4 @@
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@supabase/supabase-js";
 
 export function createRouteClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
