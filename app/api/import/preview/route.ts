@@ -11,15 +11,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("role, location_id")
-    .eq("id", authData.user.id)
-    .single();
-
-  if (profileError || !profile || profile.role !== "admin") {
-    return NextResponse.json({ error: "Admin only" }, { status: 403 });
-  }
   const body = await request.json();
   const phones: string[] = body.phones ?? [];
   if (!phones.length) {
