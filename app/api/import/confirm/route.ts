@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createRouteClient } from "@/lib/supabase/routeClient";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NormalizedContact } from "@/lib/import-utils";
 
@@ -40,7 +39,7 @@ function buildUpdatePayload(contact: NormalizedContact) {
 }
 
 export async function POST(request: Request) {
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createRouteClient();
 
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData?.user) {

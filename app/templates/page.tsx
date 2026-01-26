@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabaseClient } from "@/lib/supabase";
+import { useEffect, useMemo, useState } from "react";
+import { createBrowserClient } from "@/lib/supabase/browserClient";
 import { Button, Input, Textarea } from "@/components/ui";
 
 export default function TemplatesPage() {
+  const supabase = useMemo(() => createBrowserClient(), []);
   const [templates, setTemplates] = useState<any[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
 
   const loadTemplates = async () => {
-    const { data } = await supabaseClient
+    const { data } = await supabase
       .from("message_templates")
       .select("id, title, body, is_archived")
       .order("title");
@@ -23,7 +24,7 @@ export default function TemplatesPage() {
 
   const handleCreate = async () => {
     if (!title.trim() || !body.trim()) return;
-    await supabaseClient.from("message_templates").insert({
+    await supabase.from("message_templates").insert({
       title: title.trim(),
       body: body.trim()
     });
@@ -33,7 +34,7 @@ export default function TemplatesPage() {
   };
 
   const toggleArchive = async (templateId: string, nextState: boolean) => {
-    await supabaseClient
+    await supabase
       .from("message_templates")
       .update({ is_archived: nextState })
       .eq("id", templateId);

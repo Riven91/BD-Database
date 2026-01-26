@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabaseClient } from "@/lib/supabase";
+import { createBrowserClient } from "@/lib/supabase/browserClient";
 import { Button, Chip, Input } from "@/components/ui";
 import { computeSystemLabels } from "@/lib/import-utils";
 
@@ -16,6 +16,7 @@ const systemLabelOptions = [
 ];
 
 export default function DashboardPage() {
+  const supabase = useMemo(() => createBrowserClient(), []);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [systemFilters, setSystemFilters] = useState<string[]>([]);
@@ -25,7 +26,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const loadContacts = async () => {
       setIsLoading(true);
-      const { data } = await supabaseClient
+      const { data } = await supabase
         .from("contacts")
         .select(
           "id, full_name, phone_e164, status, updated_at, location:locations(name), last_received_at, last_sent_at, date_erstgespraech, date_tattoo_termin, price_deposit_cents, price_total_cents, tasks:tasks(due_at,status)"

@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabaseClient } from "@/lib/supabase";
+import { useEffect, useMemo, useState } from "react";
+import { createBrowserClient } from "@/lib/supabase/browserClient";
 import { Button, Input } from "@/components/ui";
 
 export default function LabelsPage() {
+  const supabase = useMemo(() => createBrowserClient(), []);
   const [labels, setLabels] = useState<any[]>([]);
   const [newLabel, setNewLabel] = useState("");
 
   const loadLabels = async () => {
-    const { data } = await supabaseClient
+    const { data } = await supabase
       .from("labels")
       .select("id, name, is_archived")
       .order("name");
@@ -22,13 +23,13 @@ export default function LabelsPage() {
 
   const handleCreate = async () => {
     if (!newLabel.trim()) return;
-    await supabaseClient.from("labels").insert({ name: newLabel.trim() });
+    await supabase.from("labels").insert({ name: newLabel.trim() });
     setNewLabel("");
     loadLabels();
   };
 
   const toggleArchive = async (labelId: string, nextState: boolean) => {
-    await supabaseClient
+    await supabase
       .from("labels")
       .update({ is_archived: nextState })
       .eq("id", labelId);
