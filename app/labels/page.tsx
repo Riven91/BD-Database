@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { createBrowserClient } from "@/lib/supabase/browserClient";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button, Input } from "@/components/ui";
 
@@ -13,11 +12,9 @@ type Label = {
 };
 
 export default function LabelsPage() {
-  const supabase = useMemo(() => createBrowserClient(), []);
   const [labels, setLabels] = useState<Label[]>([]);
   const [newLabel, setNewLabel] = useState("");
   const [newSortOrder, setNewSortOrder] = useState("1000");
-  const [isAdmin, setIsAdmin] = useState(false);
 
   const loadLabels = async () => {
     const response = await fetch("/api/labels?includeArchived=true");
@@ -26,20 +23,8 @@ export default function LabelsPage() {
     setLabels(payload.labels ?? []);
   };
 
-  const loadProfile = async () => {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) return;
-    const { data } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", authData.user.id)
-      .maybeSingle();
-    setIsAdmin(data?.role === "admin");
-  };
-
   useEffect(() => {
     loadLabels();
-    loadProfile();
   }, []);
 
   const handleCreate = async () => {
@@ -65,29 +50,23 @@ export default function LabelsPage() {
   };
 
   return (
-    <AppShell title="Labels" subtitle="Admin Verwaltung">
-      {isAdmin ? (
-        <div className="mb-6 flex flex-wrap gap-2">
-          <Input
-            placeholder="Neues Label"
-            value={newLabel}
-            onChange={(event) => setNewLabel(event.target.value)}
-          />
-          <Input
-            placeholder="Sortierung"
-            value={newSortOrder}
-            onChange={(event) => setNewSortOrder(event.target.value)}
-            type="number"
-          />
-          <Button variant="primary" onClick={handleCreate}>
-            Anlegen
-          </Button>
-        </div>
-      ) : (
-        <p className="mb-6 text-sm text-text-muted">
-          Nur Admins können Labels verwalten. Du kannst Labels im Dashboard zuweisen.
-        </p>
-      )}
+    <AppShell title="Labels" subtitle="Labelverwaltung">
+      <div className="mb-6 flex flex-wrap gap-2">
+        <Input
+          placeholder="Neues Label"
+          value={newLabel}
+          onChange={(event) => setNewLabel(event.target.value)}
+        />
+        <Input
+          placeholder="Sortierung"
+          value={newSortOrder}
+          onChange={(event) => setNewSortOrder(event.target.value)}
+          type="number"
+        />
+        <Button variant="primary" onClick={handleCreate}>
+          Anlegen
+        </Button>
+      </div>
 
       <div className="space-y-2">
         {labels.map((label) => (
@@ -106,7 +85,6 @@ export default function LabelsPage() {
                   )
                 )
               }
-              disabled={!isAdmin}
               className="max-w-xs"
             />
             <Input
@@ -121,35 +99,26 @@ export default function LabelsPage() {
                 )
               }
               type="number"
-              disabled={!isAdmin}
               className="w-32"
             />
-            {isAdmin ? (
-              <Button
-                variant="outline"
-                onClick={() =>
-                  updateLabel(label.id, {
-                    name: label.name.trim(),
-                    sort_order: label.sort_order,
-                    is_archived: label.is_archived
-                  })
-                }
-              >
-                Speichern
-              </Button>
-            ) : null}
-            {isAdmin ? (
-              <Button
-                variant="outline"
-                onClick={() => updateLabel(label.id, { is_archived: !label.is_archived })}
-              >
-                {label.is_archived ? "Reaktivieren" : "Archivieren"}
-              </Button>
-            ) : (
-              <span className="text-xs text-text-muted">
-                {label.is_archived ? "Archiviert" : "Aktiv"}
-              </span>
-            )}
+            <Button
+              variant="outline"
+              onClick={() =>
+                updateLabel(label.id, {
+                  name: label.name.trim(),
+                  sort_order: label.sort_order,
+                  is_archived: label.is_archived
+                })
+              }
+            >
+              Speichern
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => updateLabel(label.id, { is_archived: !label.is_archived })}
+            >
+              {label.is_archived ? "Reaktivieren" : "Archivieren"}
+            </Button>
           </div>
         ))}
       </div>

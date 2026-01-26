@@ -20,6 +20,7 @@ export type NormalizedContact = {
   last_received_at?: string | null;
   location_name?: string | null;
   labels?: string[];
+  source_row?: number;
 };
 
 export type ImportIssue = {
@@ -129,7 +130,8 @@ export function mapRow(row: CsvRow, rowIndex: number): {
               .split(labelSplitRegex)
               .map((label) => label.trim())
               .filter(Boolean)
-          : []
+          : [],
+        source_row: rowIndex
       }
     : null;
 

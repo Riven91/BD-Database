@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui";
@@ -22,15 +23,23 @@ type PreviewRow = {
 };
 
 export default function ImportPage() {
+  const router = useRouter();
   const [previewContacts, setPreviewContacts] = useState<NormalizedContact[]>([]);
   const [previewStats, setPreviewStats] = useState<PreviewStats | null>(null);
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    created: number;
+    updated: number;
+    skipped: number;
+    errors: { row?: number; phone?: string; message: string }[];
+  } | null>(null);
 
   const handleFile = async (file: File) => {
     setPreviewStats(null);
     setPreviewContacts([]);
     setPreviewRows([]);
+    setImportResult(null);
 
     const isCsv = file.name.toLowerCase().endsWith(".csv");
     const data = isCsv ? await file.text() : await file.arrayBuffer();
@@ -88,11 +97,23 @@ export default function ImportPage() {
 
   const handleConfirm = async () => {
     setIsImporting(true);
-    await fetch("/api/import/confirm", {
+    const response = await fetch("/api/import/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contacts: previewContacts })
     });
+    if (response.ok) {
+      const payload = await response.json();
+      setImportResult(payload);
+      router.refresh();
+    } else {
+      setImportResult({
+        created: 0,
+        updated: 0,
+        skipped: previewContacts.length,
+        errors: [{ message: "Import fehlgeschlagen" }]
+      });
+    }
     setIsImporting(false);
   };
 
@@ -101,6 +122,7 @@ export default function ImportPage() {
       <section className="rounded-lg border border-base-800 bg-base-850 p-4">
         <input
           type="file"
+          multiple={false}
           accept=".csv,.xlsx,.xls"
           onChange={(event) => {
             const file = event.target.files?.[0];
@@ -164,6 +186,25 @@ export default function ImportPage() {
           >
             {isImporting ? "Import läuft..." : "Import bestätigen"}
           </Button>
+          {importResult ? (
+            <div className="rounded-md border border-base-800 bg-base-900/60 p-3 text-sm">
+              <div>
+                Import fertig: {importResult.created} neu, {importResult.updated}{" "}
+                aktualisiert, {importResult.skipped} übersprungen
+              </div>
+              {importResult.errors?.length ? (
+                <ul className="mt-2 text-red-400">
+                  {importResult.errors.slice(0, 10).map((issue, index) => (
+                    <li key={`${issue.row ?? issue.phone ?? "row"}-${index}`}>
+                      {issue.row ? `Zeile ${issue.row}: ` : ""}
+                      {issue.phone ? `${issue.phone} - ` : ""}
+                      {issue.message}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       ) : null}
     </AppShell>
