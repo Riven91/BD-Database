@@ -16,10 +16,18 @@ export default function TemplatesPage() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadTemplates = async () => {
+    setError(null);
     const response = await fetch("/api/templates");
-    if (!response.ok) return;
+    if (!response.ok) {
+      const payload = await response
+        .json()
+        .catch(() => ({ error: "Templates konnten nicht geladen werden." }));
+      setError(payload.error ?? "Templates konnten nicht geladen werden.");
+      return;
+    }
     const payload = await response.json();
     setTemplates(payload.templates ?? []);
   };
@@ -30,18 +38,33 @@ export default function TemplatesPage() {
 
   const handleSubmit = async () => {
     if (!title.trim() || !body.trim()) return;
+    setError(null);
     if (editingId) {
-      await fetch(`/api/templates/${editingId}`, {
+      const response = await fetch(`/api/templates/${editingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: title.trim(), body: body.trim() })
       });
+      if (!response.ok) {
+        const payload = await response
+          .json()
+          .catch(() => ({ error: "Template konnte nicht gespeichert werden." }));
+        setError(payload.error ?? "Template konnte nicht gespeichert werden.");
+        return;
+      }
     } else {
-      await fetch("/api/templates", {
+      const response = await fetch("/api/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: title.trim(), body: body.trim() })
       });
+      if (!response.ok) {
+        const payload = await response
+          .json()
+          .catch(() => ({ error: "Template konnte nicht angelegt werden." }));
+        setError(payload.error ?? "Template konnte nicht angelegt werden.");
+        return;
+      }
     }
     setTitle("");
     setBody("");
@@ -50,16 +73,32 @@ export default function TemplatesPage() {
   };
 
   const toggleArchive = async (templateId: string, nextState: boolean) => {
-    await fetch(`/api/templates/${templateId}`, {
+    setError(null);
+    const response = await fetch(`/api/templates/${templateId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ is_archived: nextState })
     });
+    if (!response.ok) {
+      const payload = await response
+        .json()
+        .catch(() => ({ error: "Template konnte nicht aktualisiert werden." }));
+      setError(payload.error ?? "Template konnte nicht aktualisiert werden.");
+      return;
+    }
     loadTemplates();
   };
 
   const handleDelete = async (templateId: string) => {
-    await fetch(`/api/templates/${templateId}`, { method: "DELETE" });
+    setError(null);
+    const response = await fetch(`/api/templates/${templateId}`, { method: "DELETE" });
+    if (!response.ok) {
+      const payload = await response
+        .json()
+        .catch(() => ({ error: "Template konnte nicht gelöscht werden." }));
+      setError(payload.error ?? "Template konnte nicht gelöscht werden.");
+      return;
+    }
     if (editingId === templateId) {
       setEditingId(null);
       setTitle("");

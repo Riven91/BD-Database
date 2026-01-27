@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createRouteClient } from "@/lib/supabase/routeClient";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NormalizedContact } from "@/lib/import-utils";
+import { requireRouteAuth } from "@/lib/supabase/routeAuth";
+import { serializeSupabaseError } from "@/lib/supabase/errorUtils";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +11,9 @@ async function getLocations(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from("locations")
     .select("id, name, is_admin_only");
-  if (error) throw new Error(error.message);
+  if (error) {
+    return { map: null, error };
+  }
   const map = new Map<string, { id: string; is_admin_only: boolean }>();
   (data ?? []).forEach((location) => {
     map.set(location.name.toLowerCase(), {
@@ -17,15 +21,17 @@ async function getLocations(supabase: SupabaseClient) {
       is_admin_only: location.is_admin_only
     });
   });
-  return map;
+  return { map, error: null };
 }
 
 async function getLabels(supabase: SupabaseClient) {
   const { data, error } = await supabase.from("labels").select("id, name");
-  if (error) throw new Error(error.message);
+  if (error) {
+    return { map: null, error };
+  }
   const map = new Map<string, string>();
   (data ?? []).forEach((label) => map.set(label.name.toLowerCase(), label.id));
-  return map;
+  return { map, error: null };
 }
 
 function buildUpdatePayload(contact: NormalizedContact) {
@@ -41,22 +47,55 @@ function buildUpdatePayload(contact: NormalizedContact) {
 export async function POST(request: Request) {
   const supabase = createRouteClient();
 
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData?.user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const authResponse = await requireRouteAuth(supabase);
+  if (authResponse) return authResponse;
+  const body = await request.json().catch(() => null);
+  if (!body) {
+    return NextResponse.json(
+      { ok: false, error: "Invalid JSON body", details: null },
+      { status: 400 }
+    );
   }
-  const body = await request.json();
   const contacts: NormalizedContact[] = body.contacts ?? [];
   if (!contacts.length) {
-    return NextResponse.json({ created: 0, updated: 0, skipped: 0, errors: [] });
+    return NextResponse.json({
+      ok: true,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+      reason: "Keine Kontakte zum Importieren."
+    });
   }
 
-  const locationMap = await getLocations(supabase);
-  const labelMap = await getLabels(supabase);
+  const { map: locationMap, error: locationsError } = await getLocations(supabase);
+  if (!locationMap || locationsError) {
+    console.error("IMPORT_LOCATIONS_ERROR", locationsError);
+    return NextResponse.json(
+      {
+        ok: false,
+        error: locationsError?.message ?? "Locations lookup failed",
+        details: serializeSupabaseError(locationsError ?? null)
+      },
+      { status: 500 }
+    );
+  }
+  const { map: labelMap, error: labelsError } = await getLabels(supabase);
+  if (!labelMap || labelsError) {
+    console.error("IMPORT_LABELS_ERROR", labelsError);
+    return NextResponse.json(
+      {
+        ok: false,
+        error: labelsError?.message ?? "Labels lookup failed",
+        details: serializeSupabaseError(labelsError ?? null)
+      },
+      { status: 500 }
+    );
+  }
   let created = 0;
   let updated = 0;
   let skipped = 0;
-  const errors: { row?: number; phone?: string; message: string }[] = [];
+  const errors: { rowIndex?: number; phoneRaw?: string; reason: string }[] = [];
 
   for (const contact of contacts) {
     const row = contact.source_row;
@@ -70,7 +109,11 @@ export async function POST(request: Request) {
         .select("id, name, is_admin_only")
         .single();
       if (error) {
-        errors.push({ row, phone: contact.phone_e164, message: error.message });
+        errors.push({
+          rowIndex: row,
+          phoneRaw: contact.phone_raw ?? contact.phone_e164,
+          reason: error.message
+        });
         skipped += 1;
         continue;
       }
@@ -83,9 +126,9 @@ export async function POST(request: Request) {
     const resolvedLocation = locationMap.get(locationKey);
     if (!resolvedLocation) {
       errors.push({
-        row,
-        phone: contact.phone_e164,
-        message: `Standort ${locationName} nicht gefunden`
+        rowIndex: row,
+        phoneRaw: contact.phone_raw ?? contact.phone_e164,
+        reason: `Standort ${locationName} nicht gefunden`
       });
       skipped += 1;
       continue;
@@ -98,7 +141,11 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (existingError) {
-      errors.push({ row, phone: contact.phone_e164, message: existingError.message });
+      errors.push({
+        rowIndex: row,
+        phoneRaw: contact.phone_raw ?? contact.phone_e164,
+        reason: existingError.message
+      });
       skipped += 1;
       continue;
     }
@@ -114,7 +161,11 @@ export async function POST(request: Request) {
       .single();
 
     if (upsertError) {
-      errors.push({ row, phone: contact.phone_e164, message: upsertError.message });
+      errors.push({
+        rowIndex: row,
+        phoneRaw: contact.phone_raw ?? contact.phone_e164,
+        reason: upsertError.message
+      });
       skipped += 1;
       continue;
     }
@@ -132,7 +183,11 @@ export async function POST(request: Request) {
         .eq("phone_e164", contact.phone_e164)
         .single();
       if (contactError) {
-        errors.push({ row, phone: contact.phone_e164, message: contactError.message });
+        errors.push({
+          rowIndex: row,
+          phoneRaw: contact.phone_raw ?? contact.phone_e164,
+          reason: contactError.message
+        });
         continue;
       }
       for (const label of contact.labels) {
@@ -146,9 +201,9 @@ export async function POST(request: Request) {
             .single();
           if (labelError || !createdLabel) {
             errors.push({
-              row,
-              phone: contact.phone_e164,
-              message: labelError?.message ?? "Label konnte nicht erstellt werden"
+              rowIndex: row,
+              phoneRaw: contact.phone_raw ?? contact.phone_e164,
+              reason: labelError?.message ?? "Label konnte nicht erstellt werden"
             });
             continue;
           }
@@ -160,19 +215,28 @@ export async function POST(request: Request) {
           .upsert({ contact_id: contactRow.id, label_id: labelId });
         if (linkError) {
           errors.push({
-            row,
-            phone: contact.phone_e164,
-            message: linkError.message
+            rowIndex: row,
+            phoneRaw: contact.phone_raw ?? contact.phone_e164,
+            reason: linkError.message
           });
         }
       }
     }
   }
 
+  let reason: string | undefined;
+  if (created + updated === 0) {
+    reason = errors.length
+      ? `Keine Datensätze importiert: ${errors[0].reason}`
+      : "Keine Datensätze importiert.";
+  }
+
   return NextResponse.json({
+    ok: true,
     created,
     updated,
     skipped,
-    errors: errors.slice(0, 10)
+    errors,
+    reason
   });
 }

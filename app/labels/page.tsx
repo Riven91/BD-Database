@@ -13,13 +13,16 @@ type Label = {
 export default function LabelsPage() {
   const [labels, setLabels] = useState<Label[]>([]);
   const [newLabel, setNewLabel] = useState("");
-  const [newSortOrder, setNewSortOrder] = useState("1000");
+  const [error, setError] = useState<string | null>(null);
 
   const loadLabels = async () => {
     setError(null);
     const response = await fetch("/api/labels?includeArchived=true");
     if (!response.ok) {
-      setError("Labels konnten nicht geladen werden.");
+      const payload = await response
+        .json()
+        .catch(() => ({ error: "Labels konnten nicht geladen werden." }));
+      setError(payload.error ?? "Labels konnten nicht geladen werden.");
       return;
     }
     const payload = await response.json();
@@ -39,12 +42,14 @@ export default function LabelsPage() {
       body: JSON.stringify({ name: newLabel.trim() })
     });
     if (!response.ok) {
-      const payload = await response.json().catch(() => ({ error: "Label konnte nicht angelegt werden." }));
+      const payload = await response
+        .json()
+        .catch(() => ({ error: "Label konnte nicht angelegt werden." }));
       setError(payload.error ?? "Label konnte nicht angelegt werden.");
       return;
     }
     setNewLabel("");
-    loadLabels();
+    await loadLabels();
   };
 
   const updateLabel = async (labelId: string, updates: Partial<Label>) => {
@@ -55,26 +60,23 @@ export default function LabelsPage() {
       body: JSON.stringify(updates)
     });
     if (!response.ok) {
-      const payload = await response.json().catch(() => ({ error: "Label konnte nicht gespeichert werden." }));
+      const payload = await response
+        .json()
+        .catch(() => ({ error: "Label konnte nicht gespeichert werden." }));
       setError(payload.error ?? "Label konnte nicht gespeichert werden.");
       return;
     }
-    loadLabels();
+    await loadLabels();
   };
 
   return (
     <AppShell title="Labels" subtitle="Labelverwaltung">
+      {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
       <div className="mb-6 flex flex-wrap gap-2">
         <Input
           placeholder="Neues Label"
           value={newLabel}
           onChange={(event) => setNewLabel(event.target.value)}
-        />
-        <Input
-          placeholder="Sortierung"
-          value={newSortOrder}
-          onChange={(event) => setNewSortOrder(event.target.value)}
-          type="number"
         />
         <Button variant="primary" onClick={handleCreate}>
           Anlegen
@@ -99,24 +101,12 @@ export default function LabelsPage() {
                 )
               }
               className="max-w-xs"
-            />
+              />
             <Button
               variant="outline"
               onClick={() =>
                 updateLabel(label.id, {
                   name: label.name.trim(),
-                  is_archived: label.is_archived
-                })
-              }
-              type="number"
-              className="w-32"
-            />
-            <Button
-              variant="outline"
-              onClick={() =>
-                updateLabel(label.id, {
-                  name: label.name.trim(),
-                  sort_order: label.sort_order,
                   is_archived: label.is_archived
                 })
               }

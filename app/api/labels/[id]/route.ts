@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createRouteClient } from "@/lib/supabase/routeClient";
+import { requireRouteAuth } from "@/lib/supabase/routeAuth";
+import { serializeSupabaseError } from "@/lib/supabase/errorUtils";
 
 export const dynamic = "force-dynamic";
 
@@ -8,12 +10,16 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   const supabase = createRouteClient();
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData?.user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
+  const authResponse = await requireRouteAuth(supabase);
+  if (authResponse) return authResponse;
 
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
+  if (!body) {
+    return NextResponse.json(
+      { ok: false, error: "Invalid JSON body", details: null },
+      { status: 400 }
+    );
+  }
   const updates: Record<string, unknown> = {};
   if (typeof body.name === "string") {
     updates.name = body.name.trim();
@@ -23,17 +29,24 @@ export async function PATCH(
   }
 
   if (Object.keys(updates).length === 0) {
-    return NextResponse.json({ error: "No updates" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "No updates", details: null },
+      { status: 400 }
+    );
   }
 
   const { data, error } = await supabase
     .from("labels")
     .update(updates)
     .eq("id", params.id)
-    .select("id, name, sort_order, is_archived")
+    .select("id, name, is_archived")
     .single();
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("LABELS_PATCH_ERROR", error);
+    return NextResponse.json(
+      { ok: false, error: error.message, details: serializeSupabaseError(error) },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ label: data });
