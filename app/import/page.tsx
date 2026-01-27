@@ -33,14 +33,17 @@ export default function ImportPage() {
     created: number;
     updated: number;
     skipped: number;
-    errors: { row?: number; phone?: string; message: string }[];
+    errors: { rowIndex?: number; phoneRaw?: string; reason: string }[];
+    reason?: string;
   } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const handleFile = async (file: File) => {
     setPreviewStats(null);
     setPreviewContacts([]);
     setPreviewRows([]);
     setImportResult(null);
+    setImportError(null);
 
     const isCsv = file.name.toLowerCase().endsWith(".csv");
     const data = isCsv ? await file.text() : await file.arrayBuffer();
@@ -86,7 +89,14 @@ export default function ImportPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phones })
     });
-    const existing = response.ok ? await response.json() : { existing: [] };
+    if (!response.ok) {
+      const payload = await response
+        .json()
+        .catch(() => ({ error: "Import preview fehlgeschlagen." }));
+      setImportError(payload.error ?? "Import preview fehlgeschlagen.");
+      return;
+    }
+    const existing = await response.json();
     const existingSet = new Set(existing.existing ?? []);
 
     const newCount = phones.filter((phone) => !existingSet.has(phone)).length;
@@ -99,23 +109,29 @@ export default function ImportPage() {
 
   const handleConfirm = async () => {
     setIsImporting(true);
+    setImportError(null);
     const response = await fetch("/api/import/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contacts: previewContacts })
     });
-    if (response.ok) {
-      const payload = await response.json();
-      setImportResult(payload);
-      router.refresh();
-    } else {
+    const payload = await response
+      .json()
+      .catch(() => ({ error: "Import fehlgeschlagen." }));
+    if (!response.ok) {
+      setImportError(payload.error ?? "Import fehlgeschlagen.");
       setImportResult({
         created: 0,
         updated: 0,
         skipped: previewContacts.length,
-        errors: [{ message: "Import fehlgeschlagen" }]
+        errors: payload.errors ?? [{ reason: payload.error ?? "Import fehlgeschlagen." }],
+        reason: payload.reason
       });
+      setIsImporting(false);
+      return;
     }
+    setImportResult(payload);
+    router.refresh();
     setIsImporting(false);
   };
 
@@ -136,6 +152,7 @@ export default function ImportPage() {
       {previewStats ? (
         <section className="mt-6 space-y-4 rounded-lg border border-base-800 bg-base-850 p-4">
           <h2 className="text-lg font-semibold">Preview</h2>
+          {importError ? <p className="text-sm text-red-400">{importError}</p> : null}
           <div className="grid gap-2 text-sm">
             <div>Neue Kontakte: {previewStats.newCount}</div>
             <div>Updates: {previewStats.updateCount}</div>
@@ -194,13 +211,18 @@ export default function ImportPage() {
                 Import fertig: {importResult.created} neu, {importResult.updated}{" "}
                 aktualisiert, {importResult.skipped} übersprungen
               </div>
+              {importResult.reason ? (
+                <div className="mt-1 text-red-300">{importResult.reason}</div>
+              ) : null}
               {importResult.errors?.length ? (
                 <ul className="mt-2 text-red-400">
                   {importResult.errors.slice(0, 10).map((issue, index) => (
-                    <li key={`${issue.row ?? issue.phone ?? "row"}-${index}`}>
-                      {issue.row ? `Zeile ${issue.row}: ` : ""}
-                      {issue.phone ? `${issue.phone} - ` : ""}
-                      {issue.message}
+                    <li
+                      key={`${issue.rowIndex ?? issue.phoneRaw ?? "row"}-${index}`}
+                    >
+                      {issue.rowIndex ? `Zeile ${issue.rowIndex}: ` : ""}
+                      {issue.phoneRaw ? `${issue.phoneRaw} - ` : ""}
+                      {issue.reason}
                     </li>
                   ))}
                 </ul>

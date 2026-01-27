@@ -2,10 +2,11 @@
 
 ## Setup
 
-### 1) Supabase Projekt
+### 1) Supabase Projekt (einmalig)
 1. Neues Supabase-Projekt erstellen.
-2. SQL Migrationen ausführen: `supabase/migrations/001_init.sql`, `supabase/migrations/002_fixpack.sql` und `supabase/migrations/003_relax_rls.sql`.
-3. Supabase Auth User für das Team anlegen (siehe /setup).
+2. API-Anmeldedaten abrufen: Project URL + Anon Key (siehe Supabase → Project Settings → API).
+3. SQL Migrationen ausführen: `supabase/migrations/001_init.sql`, `supabase/migrations/002_fixpack.sql`, `supabase/migrations/003_relax_rls.sql`, `supabase/migrations/004_debug_health.sql`, `supabase/migrations/005_core_schema.sql`.
+4. Supabase Auth User für das Team anlegen (siehe /setup).
 
 ### 2) ENV Variablen
 Lege eine `.env.local` an:
@@ -34,11 +35,17 @@ npm run dev
 - Import läuft serverseitig mit einem user-scoped Supabase Client.
 - RLS ist für v1 auf alle authentifizierten Nutzer geöffnet.
 
+## Supabase Hinweise (RLS, Schema, MCP)
+- RLS ist standardmäßig aktiv: Ohne Policies blockiert Supabase Lese-/Schreibzugriffe.
+- Für Tests kannst du RLS deaktivieren (nicht empfohlen), besser: Policies in den Migrationen prüfen/anpassen.
+- Tabellen müssen physisch in der DB existieren: entweder per SQL Editor (Migrationen) oder Table Editor.
+- Moderne KI-Workflows: Mit dem Supabase MCP Server (z.B. in Cursor/VS Code) kann die KI nach OAuth-Zugriff direkt Schema/Abfragen synchronisieren.
+
 ## Seiten
 - `/login` – Supabase Auth (Email + Passwort)
-- `/` – Dashboard mit Inline-Editor (Status + Drag&Drop Labels)
+- `/` – Dashboard mit Inline-Editor (Status + Label-Dropdown)
 - `/contacts/[id]` – Kontaktkarte mit Copy-Buttons und Templates
-- `/labels` – Labelverwaltung (Sortierung/Archivierung)
+- `/labels` – Labelverwaltung (Archivierung)
 - `/templates` – Templateverwaltung
 - `/setup` – Setup-Hilfe für Team-Accounts
 - `/onboarding` – Standort-Auswahl nach erstem Login

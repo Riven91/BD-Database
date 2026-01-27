@@ -1,22 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  closestCenter,
-  DndContext,
-  DragEndEvent,
-  PointerSensor,
-  useDroppable,
-  useSensor,
-  useSensors
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import clsx from "clsx";
 import { AppShell } from "@/components/app-shell";
 import { Button, Chip, Input } from "@/components/ui";
 
@@ -31,7 +15,6 @@ const statusOptions = [
 type Label = {
   id: string;
   name: string;
-  sort_order: number;
   is_archived: boolean;
 };
 
@@ -46,63 +29,8 @@ type Contact = {
 
 function sortLabels(labels: Label[]) {
   return [...labels].sort((a, b) => {
-    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
     return a.name.localeCompare(b.name);
   });
-}
-
-function DroppableZone({
-  id,
-  children,
-  className
-}: {
-  id: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id });
-  return (
-    <div
-      ref={setNodeRef}
-      className={clsx(
-        "rounded-md border border-base-800 bg-base-900/40 p-3 transition",
-        isOver && "border-emerald-600 bg-base-900",
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SortableLabel({
-  id,
-  label,
-  onClick
-}: {
-  id: string;
-  label: string;
-  onClick?: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition
-  };
-  return (
-    <button
-      ref={setNodeRef}
-      style={style}
-      type="button"
-      onClick={onClick}
-      className={clsx("touch-none", isDragging && "opacity-60")}
-      {...attributes}
-      {...listeners}
-    >
-      <Chip label={label} />
-    </button>
-  );
 }
 
 export default function DashboardPage() {
@@ -114,9 +42,11 @@ export default function DashboardPage() {
   const [labels, setLabels] = useState<Label[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [labelSearch, setLabelSearch] = useState("");
+  const [labelSelections, setLabelSelections] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const [healthResult, setHealthResult] = useState<string | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -138,6 +68,19 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const runHealthCheck = async () => {
+    setHealthError(null);
+    setHealthResult(null);
+    const response = await fetch("/api/health");
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      setHealthError(payload?.error ?? "Health check fehlgeschlagen.");
+      setHealthResult(payload ? JSON.stringify(payload, null, 2) : null);
+      return;
+    }
+    setHealthResult(JSON.stringify(payload, null, 2));
+  };
 
   useEffect(() => {
     setLabelSearch("");
@@ -230,6 +173,27 @@ export default function DashboardPage() {
 
   return (
     <AppShell title="Kontakte" subtitle="Mini-CRM Übersicht">
+      {process.env.NODE_ENV === "development" ? (
+        <section className="mb-6 rounded-lg border border-base-800 bg-base-850 p-4">
+          <h2 className="text-base font-semibold">Debug</h2>
+          <p className="text-sm text-text-muted">
+            Health Check schreibt in die Datenbank und liest zurück.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="outline" onClick={runHealthCheck}>
+              Run Health Check
+            </Button>
+          </div>
+          {healthError ? (
+            <p className="mt-2 text-sm text-red-400">{healthError}</p>
+          ) : null}
+          {healthResult ? (
+            <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-base-900/70 p-3 text-xs text-text-muted">
+              {healthResult}
+            </pre>
+          ) : null}
+        </section>
+      ) : null}
       <section className="mb-6 grid gap-4 rounded-lg border border-base-800 bg-base-850 p-4 md:grid-cols-4">
         <Input
           placeholder="Suche nach Name oder Telefon"
@@ -297,34 +261,11 @@ export default function DashboardPage() {
               (label) => !label.is_archived && !assignedLabelIds.includes(label.id)
             )
           );
-          const availableLabelIds = availableLabels.map((label) => label.id);
           const filteredAvailable = labelSearch
             ? availableLabels.filter((label) =>
                 label.name.toLowerCase().includes(labelSearch.toLowerCase())
               )
             : availableLabels;
-
-          const handleDragEnd = (event: DragEndEvent) => {
-            const { active, over } = event;
-            if (!over) return;
-            const labelId = String(active.id);
-            const overId = String(over.id);
-            const isOverAssigned =
-              overId === "assigned" || assignedLabelIds.includes(overId);
-            const isOverAvailable =
-              overId === "available" || availableLabelIds.includes(overId);
-
-            if (isOverAssigned) {
-              if (assignedLabelIds.includes(labelId)) return;
-              const label = labels.find((item) => item.id === labelId);
-              if (label) handleAssignLabel(contact.id, label);
-              return;
-            }
-            if (isOverAvailable || overId === "remove") {
-              if (!assignedLabelIds.includes(labelId)) return;
-              handleRemoveLabel(contact.id, labelId);
-            }
-          };
 
           return (
             <div key={contact.id} className="border-b border-base-800">
@@ -392,74 +333,68 @@ export default function DashboardPage() {
                           onChange={(event) => setLabelSearch(event.target.value)}
                         />
                       </div>
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleDragEnd}
-                      >
-                        <div className="grid gap-4 lg:grid-cols-2">
-                          <DroppableZone id="available">
-                            <div className="mb-2 text-xs uppercase text-text-muted">
-                              Verfügbare Labels
-                            </div>
-                            <SortableContext
-                              items={filteredAvailable.map((label) => label.id)}
-                              strategy={verticalListSortingStrategy}
-                            >
-                              <div className="flex flex-wrap gap-2">
-                                {filteredAvailable.length ? (
-                                  filteredAvailable.map((label) => (
-                                    <SortableLabel
-                                      key={label.id}
-                                      id={label.id}
-                                      label={label.name}
-                                      onClick={() => handleAssignLabel(contact.id, label)}
-                                    />
-                                  ))
-                                ) : (
-                                  <span className="text-xs text-text-muted">
-                                    Keine Labels verfügbar
-                                  </span>
-                                )}
-                              </div>
-                            </SortableContext>
-                          </DroppableZone>
-                          <DroppableZone id="assigned">
-                            <div className="mb-2 text-xs uppercase text-text-muted">
-                              Labels dieses Kontakts
-                            </div>
-                            <SortableContext
-                              items={assignedLabelIds}
-                              strategy={verticalListSortingStrategy}
-                            >
-                              <div className="flex flex-wrap gap-2">
-                                {contact.labels.length ? (
-                                  contact.labels.map((label) => (
-                                    <SortableLabel
-                                      key={label.id}
-                                      id={label.id}
-                                      label={label.name}
-                                      onClick={() =>
-                                        handleRemoveLabel(contact.id, label.id)
-                                      }
-                                    />
-                                  ))
-                                ) : (
-                                  <span className="text-xs text-text-muted">
-                                    Noch keine Labels zugewiesen
-                                  </span>
-                                )}
-                              </div>
-                            </SortableContext>
-                          </DroppableZone>
+                      <div>
+                        <div className="mb-2 text-xs uppercase text-text-muted">
+                          Zugewiesene Labels
                         </div>
-                        <DroppableZone
-                          id="remove"
-                          className="mt-4 border-dashed text-xs text-text-muted"
+                        <div className="flex flex-wrap gap-2">
+                          {contact.labels.length ? (
+                            contact.labels.map((label) => (
+                              <span
+                                key={label.id}
+                                className="inline-flex items-center gap-2 rounded-full border border-base-800 bg-base-900 px-3 py-1 text-xs"
+                              >
+                                {label.name}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveLabel(contact.id, label.id)}
+                                  className="text-text-muted hover:text-text-base"
+                                  aria-label={`Label ${label.name} entfernen`}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-text-muted">
+                              Noch keine Labels zugewiesen
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs uppercase text-text-muted">
+                          Label hinzufügen
+                        </label>
+                        <select
+                          className="mt-2 w-full rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
+                          value={labelSelections[contact.id] ?? ""}
+                          onChange={(event) => {
+                            const selected = event.target.value;
+                            if (!selected) return;
+                            const label = labels.find((item) => item.id === selected);
+                            if (label) {
+                              handleAssignLabel(contact.id, label);
+                            }
+                            setLabelSelections((prev) => ({
+                              ...prev,
+                              [contact.id]: ""
+                            }));
+                          }}
                         >
-                          Label hierhin ziehen zum Entfernen
-                        </DroppableZone>
-                      </DndContext>
+                          <option value="">Label auswählen...</option>
+                          {filteredAvailable.map((label) => (
+                            <option key={label.id} value={label.id}>
+                              {label.name}
+                            </option>
+                          ))}
+                        </select>
+                        {filteredAvailable.length === 0 ? (
+                          <p className="mt-2 text-xs text-text-muted">
+                            Keine Labels verfügbar
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </div>
