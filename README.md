@@ -5,15 +5,17 @@
 ### 1) Supabase Projekt
 1. Neues Supabase-Projekt erstellen.
 2. SQL Migrationen ausführen: `supabase/migrations/001_init.sql`, `supabase/migrations/002_fixpack.sql` und `supabase/migrations/003_relax_rls.sql`.
-3. Supabase Auth User für das Team anlegen (siehe /setup).
+3. Project URL und Publishable (anon) key aus Project Settings → API kopieren.
+4. Supabase Auth User für das Team anlegen (siehe /setup).
 
 ### 2) ENV Variablen
-Lege eine `.env.local` an:
+Kopiere `.env.example` zu `.env.local` und ergänze die Werte:
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SETUP_TOKEN=... (ein langes, zufälliges Token)
+NEXT_TELEMETRY_DISABLED=1
 ```
 
 ### 3) App starten
@@ -46,9 +48,10 @@ npm run dev
 
 ## Deployment (Vercel)
 1. Projekt in Vercel anlegen.
-2. ENV Variablen setzen:
+2. Environment Variables setzen:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SETUP_TOKEN`
-3. Build Command: `npm run build`
-4. Output: Next.js Standard (kein Custom Output).
+3. Redeploy nach dem Setzen der Variablen starten.
+4. Build Command: `npm run build`
+5. Output: Next.js Standard (kein Custom Output).

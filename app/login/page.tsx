@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/browserClient";
+import { SetupRequired } from "@/components/setup-required";
 import { Button, Input } from "@/components/ui";
 
 export default function LoginPage() {
@@ -12,6 +13,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  if (!supabase) {
+    return <SetupRequired />;
+  }
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();

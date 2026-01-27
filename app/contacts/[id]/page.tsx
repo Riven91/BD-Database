@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/browserClient";
 import { AppShell } from "@/components/app-shell";
+import { SetupRequired } from "@/components/setup-required";
 import { Button, Chip, Input, Textarea } from "@/components/ui";
 
 export default function ContactDetailPage() {
@@ -15,6 +16,7 @@ export default function ContactDetailPage() {
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
+    if (!supabase) return;
     const load = async () => {
       const { data } = await supabase
         .from("contacts")
@@ -32,7 +34,11 @@ export default function ContactDetailPage() {
       setTemplates(templatesData ?? []);
     };
     load();
-  }, [params.id]);
+  }, [params.id, supabase]);
+
+  if (!supabase) {
+    return <SetupRequired />;
+  }
 
   if (!contact) {
     return <div className="p-8 text-text-muted">Lade Kontakt...</div>;

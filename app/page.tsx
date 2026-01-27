@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import { AppShell } from "@/components/app-shell";
+import { SetupRequired } from "@/components/setup-required";
 import { Button, Chip, Input } from "@/components/ui";
 
 const statusOptions = [
@@ -106,6 +107,9 @@ function SortableLabel({
 }
 
 export default function DashboardPage() {
+  const hasSupabaseEnv = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
@@ -117,6 +121,10 @@ export default function DashboardPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  if (!hasSupabaseEnv) {
+    return <SetupRequired />;
+  }
 
   const loadData = async () => {
     setIsLoading(true);
