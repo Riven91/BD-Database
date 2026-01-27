@@ -29,7 +29,7 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-    router.replace("/");
+    router.push("/");
     router.refresh();
     setLoading(false);
   };

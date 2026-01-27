@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { createRouteClient } from "@/lib/supabase/routeClient";
 
 export async function GET() {
-  const supabase = supabaseServer();
+  const supabase = createRouteClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
