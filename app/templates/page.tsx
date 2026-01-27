@@ -16,6 +16,7 @@ export default function TemplatesPage() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const loadTemplates = async () => {
     const response = await fetch("/api/templates");
@@ -30,41 +31,63 @@ export default function TemplatesPage() {
 
   const handleSubmit = async () => {
     if (!title.trim() || !body.trim()) return;
+    let response: Response;
     if (editingId) {
-      await fetch(`/api/templates/${editingId}`, {
+      response = await fetch(`/api/templates/${editingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: title.trim(), body: body.trim() })
       });
     } else {
-      await fetch("/api/templates", {
+      response = await fetch("/api/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: title.trim(), body: body.trim() })
       });
     }
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Template save failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
+      return;
+    }
     setTitle("");
     setBody("");
     setEditingId(null);
+    setErrorMessage("");
     loadTemplates();
   };
 
   const toggleArchive = async (templateId: string, nextState: boolean) => {
-    await fetch(`/api/templates/${templateId}`, {
+    const response = await fetch(`/api/templates/${templateId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ is_archived: nextState })
     });
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Template update failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
+      return;
+    }
+    setErrorMessage("");
     loadTemplates();
   };
 
   const handleDelete = async (templateId: string) => {
-    await fetch(`/api/templates/${templateId}`, { method: "DELETE" });
+    const response = await fetch(`/api/templates/${templateId}`, { method: "DELETE" });
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Template delete failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
+      return;
+    }
     if (editingId === templateId) {
       setEditingId(null);
       setTitle("");
       setBody("");
     }
+    setErrorMessage("");
     loadTemplates();
   };
 
@@ -104,6 +127,11 @@ export default function TemplatesPage() {
             </Button>
           ) : null}
         </div>
+        {errorMessage ? (
+          <div className="rounded-md border border-red-500/60 bg-red-500/10 p-3 text-sm text-red-200">
+            {errorMessage}
+          </div>
+        ) : null}
       </section>
 
       <section className="space-y-3">

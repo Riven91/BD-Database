@@ -14,7 +14,7 @@ type Label = {
 export default function LabelsPage() {
   const [labels, setLabels] = useState<Label[]>([]);
   const [newLabel, setNewLabel] = useState("");
-  const [newSortOrder, setNewSortOrder] = useState("1000");
+  const [errorMessage, setErrorMessage] = useState("");
 
   const loadLabels = async () => {
     const response = await fetch("/api/labels?includeArchived=true");
@@ -29,23 +29,35 @@ export default function LabelsPage() {
 
   const handleCreate = async () => {
     if (!newLabel.trim()) return;
-    const sortOrder = Number.isNaN(Number(newSortOrder)) ? 1000 : Number(newSortOrder);
-    await fetch("/api/labels", {
+    const response = await fetch("/api/labels", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newLabel.trim(), sort_order: sortOrder })
+      body: JSON.stringify({ name: newLabel.trim() })
     });
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Label creation failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
+      return;
+    }
     setNewLabel("");
-    setNewSortOrder("1000");
+    setErrorMessage("");
     loadLabels();
   };
 
   const updateLabel = async (labelId: string, updates: Partial<Label>) => {
-    await fetch(`/api/labels/${labelId}`, {
+    const response = await fetch(`/api/labels/${labelId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates)
     });
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Label update failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
+      return;
+    }
+    setErrorMessage("");
     loadLabels();
   };
 
@@ -57,16 +69,15 @@ export default function LabelsPage() {
           value={newLabel}
           onChange={(event) => setNewLabel(event.target.value)}
         />
-        <Input
-          placeholder="Sortierung"
-          value={newSortOrder}
-          onChange={(event) => setNewSortOrder(event.target.value)}
-          type="number"
-        />
         <Button variant="primary" onClick={handleCreate}>
           Anlegen
         </Button>
       </div>
+      {errorMessage ? (
+        <div className="mb-4 rounded-md border border-red-500/60 bg-red-500/10 p-3 text-sm text-red-200">
+          {errorMessage}
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         {labels.map((label) => (
@@ -87,27 +98,11 @@ export default function LabelsPage() {
               }
               className="max-w-xs"
             />
-            <Input
-              value={String(label.sort_order)}
-              onChange={(event) =>
-                setLabels((prev) =>
-                  prev.map((item) =>
-                    item.id === label.id
-                      ? { ...item, sort_order: Number(event.target.value) }
-                      : item
-                  )
-                )
-              }
-              type="number"
-              className="w-32"
-            />
             <Button
               variant="outline"
               onClick={() =>
                 updateLabel(label.id, {
-                  name: label.name.trim(),
-                  sort_order: label.sort_order,
-                  is_archived: label.is_archived
+                  name: label.name.trim()
                 })
               }
             >
