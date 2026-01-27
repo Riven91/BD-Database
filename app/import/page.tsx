@@ -28,18 +28,22 @@ export default function ImportPage() {
   const [previewStats, setPreviewStats] = useState<PreviewStats | null>(null);
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const [importResult, setImportResult] = useState<{
     created: number;
     updated: number;
     skipped: number;
     errors: { row?: number; phone?: string; message: string }[];
   } | null>(null);
+  const [importResultText, setImportResultText] = useState<string | null>(null);
 
   const handleFile = async (file: File) => {
     setPreviewStats(null);
     setPreviewContacts([]);
     setPreviewRows([]);
     setImportResult(null);
+    setImportResultText(null);
+    setErrorMessage("");
 
     const isCsv = file.name.toLowerCase().endsWith(".csv");
     const data = isCsv ? await file.text() : await file.arrayBuffer();
@@ -84,7 +88,13 @@ export default function ImportPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phones })
     });
-    const existing = response.ok ? await response.json() : { existing: [] };
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Import preview failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
+      return;
+    }
+    const existing = await response.json();
     const existingSet = new Set(existing.existing ?? []);
 
     const newCount = phones.filter((phone) => !existingSet.has(phone)).length;
@@ -97,22 +107,38 @@ export default function ImportPage() {
 
   const handleConfirm = async () => {
     setIsImporting(true);
+    setErrorMessage("");
+    setImportResult(null);
+    setImportResultText(null);
     const response = await fetch("/api/import/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contacts: previewContacts })
     });
     if (response.ok) {
-      const payload = await response.json();
-      setImportResult(payload);
+      const bodyText = await response.text();
+      try {
+        const payload = JSON.parse(bodyText);
+        if (
+          payload &&
+          typeof payload === "object" &&
+          "created" in payload &&
+          "updated" in payload &&
+          "skipped" in payload
+        ) {
+          setImportResult(payload);
+        } else {
+          setImportResultText(bodyText);
+        }
+      } catch (error) {
+        console.error("Import confirm response parse failed", error);
+        setImportResultText(bodyText);
+      }
       router.refresh();
     } else {
-      setImportResult({
-        created: 0,
-        updated: 0,
-        skipped: previewContacts.length,
-        errors: [{ message: "Import fehlgeschlagen" }]
-      });
+      const text = await response.text();
+      console.error(`Import confirm failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
     }
     setIsImporting(false);
   };
@@ -130,6 +156,11 @@ export default function ImportPage() {
           }}
         />
       </section>
+      {errorMessage ? (
+        <div className="mt-4 rounded-md border border-red-500/60 bg-red-500/10 p-3 text-sm text-red-200">
+          {errorMessage}
+        </div>
+      ) : null}
 
       {previewStats ? (
         <section className="mt-6 space-y-4 rounded-lg border border-base-800 bg-base-850 p-4">
@@ -203,6 +234,14 @@ export default function ImportPage() {
                   ))}
                 </ul>
               ) : null}
+            </div>
+          ) : null}
+          {importResultText ? (
+            <div className="rounded-md border border-base-800 bg-base-900/60 p-3 text-sm">
+              <div className="text-text-muted">Import Antwort</div>
+              <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-red-200">
+                {importResultText}
+              </pre>
             </div>
           ) : null}
         </section>
