@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createRouteClient } from "@/lib/supabase/routeClient";
+import { supabaseServer } from "@/lib/supabase/server";
 import { requireRouteAuth } from "@/lib/supabase/routeAuth";
 import { serializeSupabaseError } from "@/lib/supabase/errorUtils";
 
@@ -9,7 +9,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createRouteClient();
+  const supabase = supabaseServer();
   const authResponse = await requireRouteAuth(supabase);
   if (authResponse) return authResponse;
 
@@ -54,7 +54,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createRouteClient();
+  const supabase = supabaseServer();
   const authResponse = await requireRouteAuth(supabase);
   if (authResponse) return authResponse;
 

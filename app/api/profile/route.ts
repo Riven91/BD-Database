@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { createRouteClient } from "@/lib/supabase/routeClient";
+import { supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const supabase = createRouteClient();
+  const supabase = supabaseServer();
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -24,7 +24,7 @@ export async function GET() {
 }
 
 export async function POST() {
-  const supabase = createRouteClient();
+  const supabase = supabaseServer();
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -58,7 +58,7 @@ export async function POST() {
 }
 
 export async function PATCH(request: Request) {
-  const supabase = createRouteClient();
+  const supabase = supabaseServer();
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

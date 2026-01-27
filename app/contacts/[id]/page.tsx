@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { createBrowserClient } from "@/lib/supabase/browserClient";
+import { supabaseBrowser } from "@/lib/supabase/browser";
 import { AppShell } from "@/components/app-shell";
 import { Button, Chip, Input, Textarea } from "@/components/ui";
 
 export default function ContactDetailPage() {
-  const supabase = useMemo(() => createBrowserClient(), []);
+  const supabase = useMemo(() => supabaseBrowser(), []);
   const params = useParams<{ id: string }>();
   const [contact, setContact] = useState<any | null>(null);
   const [templates, setTemplates] = useState<any[]>([]);

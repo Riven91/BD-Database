@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { createRouteClient } from "@/lib/supabase/routeClient";
+import { supabaseServer } from "@/lib/supabase/server";
 import { requireRouteAuth } from "@/lib/supabase/routeAuth";
 import { serializeSupabaseError } from "@/lib/supabase/errorUtils";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const supabase = createRouteClient();
+  const supabase = supabaseServer();
   const authResponse = await requireRouteAuth(supabase);
   if (authResponse) return authResponse;
 
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = createRouteClient();
+  const supabase = supabaseServer();
   const authResponse = await requireRouteAuth(supabase);
   if (authResponse) return authResponse;
 

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { createRouteClient } from "@/lib/supabase/routeClient";
+import { supabaseServer } from "@/lib/supabase/server";
 import { serializeSupabaseError } from "@/lib/supabase/errorUtils";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const supabase = createRouteClient();
+  const supabase = supabaseServer();
   const note = `health-check ${new Date().toISOString()}`;
 
   const insertResult = await supabase

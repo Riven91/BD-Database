@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createRouteClient } from "@/lib/supabase/routeClient";
+import { supabaseServer } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NormalizedContact } from "@/lib/import-utils";
 import { requireRouteAuth } from "@/lib/supabase/routeAuth";
@@ -45,7 +45,7 @@ function buildUpdatePayload(contact: NormalizedContact) {
 }
 
 export async function POST(request: Request) {
-  const supabase = createRouteClient();
+  const supabase = supabaseServer();
 
   const authResponse = await requireRouteAuth(supabase);
   if (authResponse) return authResponse;
