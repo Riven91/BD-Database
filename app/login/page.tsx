@@ -5,8 +5,16 @@ import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/browserClient";
 import { Button, Input } from "@/components/ui";
 
+export const dynamic = "force-dynamic";
+
 export default function LoginPage() {
-  const supabase = useMemo(() => createBrowserClient(), []);
+  const hasSupabaseEnv = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+  const supabase = useMemo(
+    () => (hasSupabaseEnv ? createBrowserClient() : null),
+    [hasSupabaseEnv]
+  );
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,6 +23,10 @@ export default function LoginPage() {
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!supabase) {
+      setError("Supabase env vars fehlen. Login aktuell nicht verfügbar.");
+      return;
+    }
     setLoading(true);
     setError(null);
     const { error: signInError } = await supabase.auth.signInWithPassword({
