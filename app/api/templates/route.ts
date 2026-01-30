@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import { notAuth, requireUser } from "@/lib/supabase/routeAuth";
+import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET() {
-  const { supabase, user } = await requireUser();
-  if (!user) return notAuth();
+export async function GET(request: Request) {
+  const { supabase, user } = await getSupabaseAuthed(request);
+  if (!user) {
+    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+  }
 
   const { data, error } = await supabase
     .from("message_templates")
@@ -21,8 +23,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { supabase, user } = await requireUser();
-  if (!user) return notAuth();
+  const { supabase, user } = await getSupabaseAuthed(request);
+  if (!user) {
+    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+  }
 
   const body = await request.json();
   const title = body.title?.trim();

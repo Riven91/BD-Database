@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button, Input } from "@/components/ui";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 type Label = {
   id: string;
@@ -17,7 +18,7 @@ export default function LabelsPage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const loadLabels = async () => {
-    const response = await fetch("/api/labels?includeArchived=true");
+    const response = await fetchWithAuth("/api/labels?includeArchived=true");
     if (!response.ok) return;
     const payload = await response.json();
     setLabels(payload.labels ?? []);
@@ -29,7 +30,7 @@ export default function LabelsPage() {
 
   const handleCreate = async () => {
     if (!newLabel.trim()) return;
-    const response = await fetch("/api/labels", {
+    const response = await fetchWithAuth("/api/labels", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newLabel.trim() })
@@ -46,7 +47,7 @@ export default function LabelsPage() {
   };
 
   const updateLabel = async (labelId: string, updates: Partial<Label>) => {
-    const response = await fetch(`/api/labels/${labelId}`, {
+    const response = await fetchWithAuth(`/api/labels/${labelId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates)

@@ -20,6 +20,7 @@ import clsx from "clsx";
 import { AppShell } from "@/components/app-shell";
 import LogoutButton from "@/components/LogoutButton";
 import { Button, Chip, Input } from "@/components/ui";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 const statusOptions = [
   { value: "neu", label: "Neu" },
@@ -141,8 +142,8 @@ export default function DashboardPage() {
     const locationParam =
       locationValue !== "all" ? `?location=${encodeURIComponent(locationValue)}` : "";
     const [contactsResponse, labelsResponse] = await Promise.all([
-      fetch(`/api/contacts${locationParam}`),
-      fetch("/api/labels")
+      fetchWithAuth(`/api/contacts${locationParam}`),
+      fetchWithAuth("/api/labels")
     ]);
     if (contactsResponse.ok) {
       const payload = await contactsResponse.json();
@@ -191,7 +192,7 @@ export default function DashboardPage() {
         contact.id === contactId ? { ...contact, status } : contact
       )
     );
-    const response = await fetch(`/api/contacts/${contactId}`, {
+    const response = await fetchWithAuth(`/api/contacts/${contactId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status })
@@ -213,7 +214,7 @@ export default function DashboardPage() {
         };
       })
     );
-    const response = await fetch(`/api/contacts/${contactId}/labels`, {
+    const response = await fetchWithAuth(`/api/contacts/${contactId}/labels`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ labelId: label.id })
@@ -233,7 +234,8 @@ export default function DashboardPage() {
         };
       })
     );
-    const response = await fetch(`/api/contacts/${contactId}/labels?labelId=${labelId}`,
+    const response = await fetchWithAuth(
+      `/api/contacts/${contactId}/labels?labelId=${labelId}`,
       { method: "DELETE" }
     );
     if (!response.ok) {

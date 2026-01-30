@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button, Input, Textarea } from "@/components/ui";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 type Template = {
   id: string;
@@ -19,7 +20,7 @@ export default function TemplatesPage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const loadTemplates = async () => {
-    const response = await fetch("/api/templates");
+    const response = await fetchWithAuth("/api/templates");
     if (!response.ok) return;
     const payload = await response.json();
     setTemplates(payload.templates ?? []);
@@ -33,13 +34,13 @@ export default function TemplatesPage() {
     if (!title.trim() || !body.trim()) return;
     let response: Response;
     if (editingId) {
-      response = await fetch(`/api/templates/${editingId}`, {
+      response = await fetchWithAuth(`/api/templates/${editingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: title.trim(), body: body.trim() })
       });
     } else {
-      response = await fetch("/api/templates", {
+      response = await fetchWithAuth("/api/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: title.trim(), body: body.trim() })
@@ -59,7 +60,7 @@ export default function TemplatesPage() {
   };
 
   const toggleArchive = async (templateId: string, nextState: boolean) => {
-    const response = await fetch(`/api/templates/${templateId}`, {
+    const response = await fetchWithAuth(`/api/templates/${templateId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ is_archived: nextState })
@@ -75,7 +76,9 @@ export default function TemplatesPage() {
   };
 
   const handleDelete = async (templateId: string) => {
-    const response = await fetch(`/api/templates/${templateId}`, { method: "DELETE" });
+    const response = await fetchWithAuth(`/api/templates/${templateId}`, {
+      method: "DELETE"
+    });
     if (!response.ok) {
       const text = await response.text();
       console.error(`Template delete failed (HTTP ${response.status})`, text);

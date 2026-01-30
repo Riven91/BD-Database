@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button, Input } from "@/components/ui";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 export default function LoginPage() {
   const supabase = useMemo(() => createClientComponentClient(), []);
@@ -26,7 +27,7 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-    const profileResponse = await fetch("/api/profile", { method: "POST" });
+    const profileResponse = await fetchWithAuth("/api/profile", { method: "POST" });
     if (profileResponse.ok) {
       const payload = await profileResponse.json();
       if (!payload.profile?.location_id) {
