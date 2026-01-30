@@ -44,6 +44,23 @@ type Contact = {
   labels: { id: string; name: string }[];
 };
 
+const locationOptions = [
+  { value: "all", label: "Alle" },
+  { value: "heilbronn", label: "Heilbronn" },
+  { value: "pforzheim", label: "Pforzheim" },
+  { value: "boeblingen", label: "Böblingen" }
+];
+
+function normalizeLocationName(value?: string | null) {
+  if (!value) return "";
+  return value
+    .trim()
+    .toLowerCase()
+    .replaceAll("ä", "ae")
+    .replaceAll("ö", "oe")
+    .replaceAll("ü", "ue");
+}
+
 function sortLabels(labels: Label[]) {
   return [...labels].sort((a, b) => {
     if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
@@ -118,10 +135,12 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const loadData = async () => {
+  const loadData = async (locationValue: string) => {
     setIsLoading(true);
+    const locationParam =
+      locationValue !== "all" ? `?location=${encodeURIComponent(locationValue)}` : "";
     const [contactsResponse, labelsResponse] = await Promise.all([
-      fetch("/api/contacts"),
+      fetch(`/api/contacts${locationParam}`),
       fetch("/api/labels")
     ]);
     if (contactsResponse.ok) {
@@ -136,20 +155,12 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    loadData(locationFilter);
+  }, [locationFilter]);
 
   useEffect(() => {
     setLabelSearch("");
   }, [expandedId]);
-
-  const locations = useMemo(() => {
-    const unique = new Set<string>();
-    contacts.forEach((contact) => {
-      if (contact.location?.name) unique.add(contact.location.name);
-    });
-    return Array.from(unique).sort();
-  }, [contacts]);
 
   const filteredContacts = useMemo(() => {
     return contacts.filter((contact) => {
@@ -161,7 +172,8 @@ export default function DashboardPage() {
         : true;
       const matchesStatus = statusFilter === "all" || contact.status === statusFilter;
       const matchesLocation =
-        locationFilter === "all" || contact.location?.name === locationFilter;
+        locationFilter === "all" ||
+        normalizeLocationName(contact.location?.name) === locationFilter;
       const matchesLabels = labelFilters.length
         ? labelFilters.every((labelId) =>
             contact.labels.some((label) => label.id === labelId)
@@ -184,7 +196,7 @@ export default function DashboardPage() {
       body: JSON.stringify({ status })
     });
     if (!response.ok) {
-      await loadData();
+      await loadData(locationFilter);
     }
     setSavingId(null);
   };
@@ -206,7 +218,7 @@ export default function DashboardPage() {
       body: JSON.stringify({ labelId: label.id })
     });
     if (!response.ok) {
-      await loadData();
+      await loadData(locationFilter);
     }
   };
 
@@ -224,7 +236,7 @@ export default function DashboardPage() {
       { method: "DELETE" }
     );
     if (!response.ok) {
-      await loadData();
+      await loadData(locationFilter);
     }
   };
 
@@ -253,10 +265,9 @@ export default function DashboardPage() {
           value={locationFilter}
           onChange={(event) => setLocationFilter(event.target.value)}
         >
-          <option value="all">Alle Standorte</option>
-          {locations.map((location) => (
-            <option key={location} value={location}>
-              {location}
+          {locationOptions.map((location) => (
+            <option key={location.value} value={location.value}>
+              {location.label}
             </option>
           ))}
         </select>

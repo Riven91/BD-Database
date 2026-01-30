@@ -1,25 +1,24 @@
 import { NextResponse } from "next/server";
-import { createRouteClient } from "@/lib/supabase/routeClient";
+import { notAuth, requireUser } from "@/lib/supabase/routeSupabase";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const supabase = createRouteClient();
-
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData?.user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
+  const { supabase, user } = await requireUser();
+  if (!user) return notAuth();
 
   const body = await request.json();
   const phones: string[] = body.phones ?? [];
   if (!phones.length) {
     return NextResponse.json({ existing: [] });
   }
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("contacts")
     .select("phone_e164")
     .in("phone_e164", phones);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   const existing = (data ?? []).map((row) => row.phone_e164);
   return NextResponse.json({ existing });
 }

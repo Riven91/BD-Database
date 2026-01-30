@@ -1,23 +1,14 @@
 import { NextResponse } from "next/server";
-import { createRouteClient } from "@/lib/supabase/routeClient";
+import { notAuth, requireUser } from "@/lib/supabase/routeSupabase";
 
 export const dynamic = "force-dynamic";
-
-async function requireAuth(supabase: ReturnType<typeof createRouteClient>) {
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData?.user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-  return null;
-}
 
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createRouteClient();
-  const authError = await requireAuth(supabase);
-  if (authError) return authError;
+  const { supabase, user } = await requireUser();
+  if (!user) return notAuth();
 
   const body = await request.json();
   const updates: Record<string, unknown> = {};
@@ -47,9 +38,8 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createRouteClient();
-  const authError = await requireAuth(supabase);
-  if (authError) return authError;
+  const { supabase, user } = await requireUser();
+  if (!user) return notAuth();
 
   const { error } = await supabase.from("message_templates").delete().eq("id", params.id);
   if (error) {
