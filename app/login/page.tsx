@@ -1,13 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button, Input } from "@/components/ui";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { getPlainSupabaseBrowser } from "@/lib/supabase/plainBrowserClient";
 
 export default function LoginPage() {
-  const supabase = useMemo(() => createClientComponentClient(), []);
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,6 +17,7 @@ export default function LoginPage() {
     event.preventDefault();
     setLoading(true);
     setError(null);
+    const supabase = getPlainSupabaseBrowser();
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password

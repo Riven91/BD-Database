@@ -1,12 +1,12 @@
 "use client";
 
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { getPlainSupabaseBrowser } from "@/lib/supabase/plainBrowserClient";
 
 export async function fetchWithAuth(
   input: RequestInfo,
   init: RequestInit = {}
 ) {
-  const supabase = createClientComponentClient();
+  const supabase = getPlainSupabaseBrowser();
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
 

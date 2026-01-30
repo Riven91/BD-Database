@@ -1,7 +1,7 @@
 "use client";
 
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { getPlainSupabaseBrowser } from "@/lib/supabase/plainBrowserClient";
 
 export function supabaseBrowser() {
-  return createClientComponentClient();
+  return getPlainSupabaseBrowser();
 }

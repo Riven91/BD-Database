@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { getPlainSupabaseBrowser } from "@/lib/supabase/plainBrowserClient";
 
 type SessionInfo = {
   hasSession: boolean;
@@ -25,7 +25,7 @@ export default function AuthDebugPanel() {
   const loadSession = async () => {
     setError(null);
     try {
-      const supabase = createClientComponentClient();
+      const supabase = getPlainSupabaseBrowser();
       const { data, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
       const session = data.session;
