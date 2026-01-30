@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createBrowserClient } from "@/lib/supabase/browserClient";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button, Input } from "@/components/ui";
 
 export default function LoginPage() {
-  const supabase = useMemo(() => createBrowserClient(), []);
+  const supabase = useMemo(() => createClientComponentClient(), []);
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,11 +30,13 @@ export default function LoginPage() {
     if (profileResponse.ok) {
       const payload = await profileResponse.json();
       if (!payload.profile?.location_id) {
-        router.push("/onboarding");
+        router.replace("/onboarding");
+        router.refresh();
         return;
       }
     }
-    router.push("/");
+    router.replace("/");
+    router.refresh();
   };
 
   return (
