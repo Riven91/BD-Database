@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browserClient";
 import { AppShell } from "@/components/app-shell";
 import { Button, Chip, Input, Textarea } from "@/components/ui";
 
 export default function ContactDetailPage() {
-  const supabase = useMemo(() => supabaseBrowser(), []);
   const params = useParams<{ id: string }>();
   const [contact, setContact] = useState<any | null>(null);
   const [templates, setTemplates] = useState<any[]>([]);
@@ -16,6 +15,7 @@ export default function ContactDetailPage() {
 
   useEffect(() => {
     const load = async () => {
+      const supabase = supabaseBrowser();
       const { data } = await supabase
         .from("contacts")
         .select(
@@ -23,8 +23,9 @@ export default function ContactDetailPage() {
         )
         .eq("id", params.id)
         .single();
-      setContact(data);
-      setNotes(data?.notes ?? "");
+      const contactData = data as any;
+      setContact(contactData);
+      setNotes(contactData?.notes ?? "");
       const { data: templatesData } = await supabase
         .from("message_templates")
         .select("id, title, body")

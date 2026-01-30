@@ -5,9 +5,9 @@ import { getPlainSupabaseBrowser } from "@/lib/supabase/plainBrowserClient";
 
 export default function LogoutButton() {
   const router = useRouter();
-  const supabase = getPlainSupabaseBrowser();
 
   const onLogout = async () => {
+    const supabase = getPlainSupabaseBrowser();
     await supabase.auth.signOut();
     router.replace("/login");
     router.refresh();
