@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import { AppShell } from "@/components/app-shell";
+import LogoutButton from "@/components/LogoutButton";
 import { Button, Chip, Input } from "@/components/ui";
 
 const statusOptions = [
@@ -241,7 +242,11 @@ export default function DashboardPage() {
   };
 
   return (
-    <AppShell title="Kontakte" subtitle="Mini-CRM Übersicht">
+    <AppShell
+      title="Kontakte"
+      subtitle="Mini-CRM Übersicht"
+      action={<LogoutButton />}
+    >
       <section className="mb-6 grid gap-4 rounded-lg border border-base-800 bg-base-850 p-4 md:grid-cols-4">
         <Input
           placeholder="Suche nach Name oder Telefon"

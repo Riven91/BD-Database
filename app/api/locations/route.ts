@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
-import { createRouteClient } from "@/lib/supabase/routeClient";
+import { notAuth, requireUser } from "@/lib/supabase/routeAuth";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET() {
-  const supabase = createRouteClient();
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData?.user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
+  const { supabase, user } = await requireUser();
+  if (!user) return notAuth();
 
   const { data, error } = await supabase
     .from("locations")

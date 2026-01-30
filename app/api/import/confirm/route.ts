@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { notAuth, requireUser } from "@/lib/supabase/routeSupabase";
+import { notAuth, requireUser } from "@/lib/supabase/routeAuth";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NormalizedContact } from "@/lib/import-utils";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 async function getLocations(supabase: SupabaseClient) {
   const { data, error } = await supabase

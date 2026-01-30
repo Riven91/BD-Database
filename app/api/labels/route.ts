@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { notAuth, requireUser } from "@/lib/supabase/routeSupabase";
+import { notAuth, requireUser } from "@/lib/supabase/routeAuth";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET(request: Request) {
   const { supabase, user } = await requireUser();

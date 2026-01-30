@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { notAuth, requireUser } from "@/lib/supabase/routeSupabase";
+import { notAuth, requireUser } from "@/lib/supabase/routeAuth";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const locationMap = new Map<string, string>([
   ["heilbronn", "Heilbronn"],
