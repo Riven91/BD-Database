@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { notAuth, requireUser } from "@/lib/supabase/routeSupabase";
+import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NormalizedContact } from "@/lib/import-utils";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 async function getLocations(supabase: SupabaseClient) {
   const { data, error } = await supabase
@@ -39,8 +40,10 @@ function buildUpdatePayload(contact: NormalizedContact) {
 }
 
 export async function POST(request: Request) {
-  const { supabase, user } = await requireUser();
-  if (!user) return notAuth();
+  const { supabase, user } = await getSupabaseAuthed(request);
+  if (!user) {
+    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const contacts: NormalizedContact[] = body.contacts ?? [];

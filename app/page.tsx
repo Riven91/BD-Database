@@ -18,7 +18,10 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import { AppShell } from "@/components/app-shell";
+import AuthDebugPanel from "@/components/AuthDebugPanel";
+import LogoutButton from "@/components/LogoutButton";
 import { Button, Chip, Input } from "@/components/ui";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 const statusOptions = [
   { value: "neu", label: "Neu" },
@@ -140,8 +143,8 @@ export default function DashboardPage() {
     const locationParam =
       locationValue !== "all" ? `?location=${encodeURIComponent(locationValue)}` : "";
     const [contactsResponse, labelsResponse] = await Promise.all([
-      fetch(`/api/contacts${locationParam}`),
-      fetch("/api/labels")
+      fetchWithAuth(`/api/contacts${locationParam}`),
+      fetchWithAuth("/api/labels")
     ]);
     if (contactsResponse.ok) {
       const payload = await contactsResponse.json();
@@ -190,7 +193,7 @@ export default function DashboardPage() {
         contact.id === contactId ? { ...contact, status } : contact
       )
     );
-    const response = await fetch(`/api/contacts/${contactId}`, {
+    const response = await fetchWithAuth(`/api/contacts/${contactId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status })
@@ -212,7 +215,7 @@ export default function DashboardPage() {
         };
       })
     );
-    const response = await fetch(`/api/contacts/${contactId}/labels`, {
+    const response = await fetchWithAuth(`/api/contacts/${contactId}/labels`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ labelId: label.id })
@@ -232,7 +235,8 @@ export default function DashboardPage() {
         };
       })
     );
-    const response = await fetch(`/api/contacts/${contactId}/labels?labelId=${labelId}`,
+    const response = await fetchWithAuth(
+      `/api/contacts/${contactId}/labels?labelId=${labelId}`,
       { method: "DELETE" }
     );
     if (!response.ok) {
@@ -241,7 +245,14 @@ export default function DashboardPage() {
   };
 
   return (
-    <AppShell title="Kontakte" subtitle="Mini-CRM Übersicht">
+    <AppShell
+      title="Kontakte"
+      subtitle="Mini-CRM Übersicht"
+      action={<LogoutButton />}
+    >
+      <div className="mb-6">
+        <AuthDebugPanel />
+      </div>
       <section className="mb-6 grid gap-4 rounded-lg border border-base-800 bg-base-850 p-4 md:grid-cols-4">
         <Input
           placeholder="Suche nach Name oder Telefon"

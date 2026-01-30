@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createBrowserClient } from "@/lib/supabase/browserClient";
 import { Button, Input } from "@/components/ui";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { getPlainSupabaseBrowser } from "@/lib/supabase/plainBrowserClient";
 
 export default function LoginPage() {
-  const supabase = useMemo(() => createBrowserClient(), []);
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,6 +17,7 @@ export default function LoginPage() {
     event.preventDefault();
     setLoading(true);
     setError(null);
+    const supabase = getPlainSupabaseBrowser();
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password
@@ -26,15 +27,17 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-    const profileResponse = await fetch("/api/profile", { method: "POST" });
+    const profileResponse = await fetchWithAuth("/api/profile", { method: "POST" });
     if (profileResponse.ok) {
       const payload = await profileResponse.json();
       if (!payload.profile?.location_id) {
-        router.push("/onboarding");
+        router.replace("/onboarding");
+        router.refresh();
         return;
       }
     }
-    router.push("/");
+    router.replace("/");
+    router.refresh();
   };
 
   return (

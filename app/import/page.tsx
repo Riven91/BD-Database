@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui";
 import { mapRow, type CsvRow, type NormalizedContact } from "@/lib/import-utils";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 type PreviewStats = {
   newCount: number;
@@ -83,7 +84,7 @@ export default function ImportPage() {
     });
 
     const phones = contacts.map((contact) => contact.phone_e164);
-    const response = await fetch("/api/import/preview", {
+    const response = await fetchWithAuth("/api/import/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phones })
@@ -110,7 +111,7 @@ export default function ImportPage() {
     setErrorMessage("");
     setImportResult(null);
     setImportResultText(null);
-    const response = await fetch("/api/import/confirm", {
+    const response = await fetchWithAuth("/api/import/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contacts: previewContacts })

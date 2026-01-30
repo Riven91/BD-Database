@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 type Location = {
   id: string;
@@ -21,7 +22,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      const profileResponse = await fetch("/api/profile", { method: "POST" });
+      const profileResponse = await fetchWithAuth("/api/profile", { method: "POST" });
       if (profileResponse.status === 401) {
         router.push("/login");
         return;
@@ -31,7 +32,7 @@ export default function OnboardingPage() {
         router.push("/");
         return;
       }
-      const locationsResponse = await fetch("/api/locations");
+      const locationsResponse = await fetchWithAuth("/api/locations");
       if (locationsResponse.ok) {
         const payload = await locationsResponse.json();
         setLocations(payload.locations ?? []);
@@ -49,7 +50,7 @@ export default function OnboardingPage() {
     }
     setSaving(true);
     setError(null);
-    const response = await fetch("/api/profile", {
+    const response = await fetchWithAuth("/api/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ location_id: selectedLocation })

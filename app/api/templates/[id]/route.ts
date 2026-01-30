@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
-import { notAuth, requireUser } from "@/lib/supabase/routeSupabase";
+import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const { supabase, user } = await requireUser();
-  if (!user) return notAuth();
+  const { supabase, user } = await getSupabaseAuthed(request);
+  if (!user) {
+    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+  }
 
   const body = await request.json();
   const updates: Record<string, unknown> = {};
@@ -38,8 +41,10 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const { supabase, user } = await requireUser();
-  if (!user) return notAuth();
+  const { supabase, user } = await getSupabaseAuthed(request);
+  if (!user) {
+    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+  }
 
   const { error } = await supabase.from("message_templates").delete().eq("id", params.id);
   if (error) {

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { notAuth, requireUser } from "@/lib/supabase/routeSupabase";
+import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const locationMap = new Map<string, string>([
   ["heilbronn", "Heilbronn"],
@@ -21,8 +22,10 @@ function normalizeLocationParam(value: string | null) {
 }
 
 export async function GET(request: Request) {
-  const { supabase, user } = await requireUser();
-  if (!user) return notAuth();
+  const { supabase, user } = await getSupabaseAuthed(request);
+  if (!user) {
+    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+  }
 
   const url = new URL(request.url);
   const locationFilter = normalizeLocationParam(url.searchParams.get("location"));

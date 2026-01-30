@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { createRouteClient } from "@/lib/supabase/routeClient";
+import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const allowedStatuses = [
   "neu",
@@ -15,10 +16,9 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createRouteClient();
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData?.user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const { supabase, user } = await getSupabaseAuthed(request);
+  if (!user) {
+    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }
 
   const body = await request.json();
