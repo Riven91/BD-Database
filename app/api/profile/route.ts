@@ -1,19 +1,16 @@
 import { NextResponse } from "next/server";
-import { createRouteClient } from "@/lib/supabase/routeClient";
+import { notAuth, requireUser } from "@/lib/supabase/routeSupabase";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const supabase = createRouteClient();
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData?.user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
+  const { supabase, user } = await requireUser();
+  if (!user) return notAuth();
 
   const { data, error } = await supabase
     .from("profiles")
     .select("id, role, location_id")
-    .eq("id", authData.user.id)
+    .eq("id", user.id)
     .maybeSingle();
 
   if (error) {
@@ -24,16 +21,13 @@ export async function GET() {
 }
 
 export async function POST() {
-  const supabase = createRouteClient();
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData?.user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
+  const { supabase, user } = await requireUser();
+  if (!user) return notAuth();
 
   const { data: existing, error: existingError } = await supabase
     .from("profiles")
     .select("id, role, location_id")
-    .eq("id", authData.user.id)
+    .eq("id", user.id)
     .maybeSingle();
 
   if (existingError) {
@@ -46,7 +40,7 @@ export async function POST() {
 
   const { data, error } = await supabase
     .from("profiles")
-    .insert({ id: authData.user.id, role: "staff", location_id: null })
+    .insert({ id: user.id, role: "staff", location_id: null })
     .select("id, role, location_id")
     .single();
 
@@ -58,11 +52,8 @@ export async function POST() {
 }
 
 export async function PATCH(request: Request) {
-  const supabase = createRouteClient();
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData?.user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
+  const { supabase, user } = await requireUser();
+  if (!user) return notAuth();
 
   const body = await request.json();
   const locationId = body.location_id;
@@ -73,7 +64,7 @@ export async function PATCH(request: Request) {
   const { data, error } = await supabase
     .from("profiles")
     .update({ location_id: locationId })
-    .eq("id", authData.user.id)
+    .eq("id", user.id)
     .select("id, role, location_id")
     .single();
 
