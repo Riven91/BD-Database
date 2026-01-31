@@ -180,9 +180,10 @@ export async function POST(request: Request) {
             labelId = createdLabel.id;
             labelMap.set(createdLabel.name.toLowerCase(), createdLabel.id);
           }
-          const { error: linkError } = await supabase
-            .from("contact_labels")
-            .upsert({ contact_id: contactId, label_id: labelId }, { onConflict: "contact_id,label_id" });
+          const { error: linkError } = await supabase.from("contact_labels").upsert(
+            { contact_id: contactId, label_id: labelId },
+            { onConflict: "contact_id,label_id" }
+          );
           if (linkError) {
             errors.push({
               row,

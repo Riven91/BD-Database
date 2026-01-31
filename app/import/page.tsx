@@ -142,11 +142,16 @@ export default function ImportPage() {
       for (let i = 0; i < batches.length; i += 1) {
         const batch = batches[i];
         console.log(`CONFIRM:batch ${i + 1}/${batches.length}`, { count: batch.length });
-        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        const total = batches.length;
+        console.log("CONFIRM:before fetch", {
+          batch: i + 1,
+          total,
+          count: batch.length
+        });
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 55000);
         try {
-          const controller = new AbortController();
-          timeoutId = setTimeout(() => controller.abort(), 55000);
-          const response = await fetch("/api/import/confirm", {
+          const res = await fetch("/api/import/confirm", {
             method: "POST",
             body: JSON.stringify({ contacts: batch }),
             credentials: "include",
@@ -156,22 +161,20 @@ export default function ImportPage() {
             },
             signal: controller.signal
           });
-          const payload = await response.json().catch(() => null);
-          if (!response.ok || payload?.finished !== true) {
-            throw new Error(
-              `Import bestätigen fehlgeschlagen (Status ${response.status})`
-            );
+          console.log("CONFIRM:after fetch", { batch: i + 1, status: res.status });
+          const data = await res.json().catch(() => null);
+          console.log("CONFIRM:after json", { batch: i + 1, data });
+          if (!res.ok) {
+            throw new Error(JSON.stringify({ status: res.status, data }));
           }
-          totals.created += payload.created ?? 0;
-          totals.updated += payload.updated ?? 0;
-          totals.skipped += payload.skipped ?? 0;
-          totals.errors = totals.errors.concat(payload.errors ?? []);
+          totals.created += data?.created ?? 0;
+          totals.updated += data?.updated ?? 0;
+          totals.skipped += data?.skipped ?? 0;
+          totals.errors = totals.errors.concat(data?.errors ?? []);
           setImportResult({ ...totals });
           setImportResultText(`Batch ${i + 1}/${batches.length} abgeschlossen`);
         } finally {
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
+          clearTimeout(t);
         }
       }
       setImportResult({ ...totals });
