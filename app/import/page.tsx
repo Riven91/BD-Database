@@ -84,10 +84,11 @@ export default function ImportPage() {
     });
 
     const phones = contacts.map((contact) => contact.phone_e164);
+    const formData = new FormData();
+    formData.append("file", file);
     const response = await fetchWithAuth("/api/import/preview", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phones })
+      body: formData
     });
     if (!response.ok) {
       const text = await response.text();
