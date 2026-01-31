@@ -41,7 +41,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("contacts")
     .select(
-      "id, full_name, phone_e164, status, location:locations(name), labels:contact_labels(labels(id,name,sort_order,is_archived))"
+      "id, name, first_name, last_name, phone_e164, status, location:locations(name), labels:contact_labels(labels(id,name,sort_order,is_archived))"
     )
     .order("created_at", { ascending: false })
     .range(0, 199);
