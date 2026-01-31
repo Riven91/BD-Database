@@ -40,8 +40,10 @@ type Label = {
 
 type Contact = {
   id: string;
-  full_name: string | null;
-  phone_e164: string;
+  name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  phone_e164: string | null;
   status: string;
   location: { name: string } | null;
   labels: { id: string; name: string }[];
@@ -69,6 +71,19 @@ function sortLabels(labels: Label[]) {
     if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
     return a.name.localeCompare(b.name);
   });
+}
+
+function getContactDisplayName(contact: Contact) {
+  const combinedName = [contact.first_name, contact.last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  return (
+    contact.name ??
+    (combinedName.length > 0 ? combinedName : null) ??
+    contact.phone_e164 ??
+    "—"
+  );
 }
 
 function DroppableZone({
@@ -185,8 +200,14 @@ export default function DashboardPage() {
 
   const filteredContacts = useMemo(() => {
     return contacts.filter((contact) => {
+      const combinedName = [contact.first_name, contact.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      const nameValue =
+        contact.name ?? (combinedName.length > 0 ? combinedName : null);
       const matchesQuery = query
-        ? [contact.full_name, contact.phone_e164]
+        ? [nameValue, contact.phone_e164]
             .join(" ")
             .toLowerCase()
             .includes(query.toLowerCase())
@@ -338,182 +359,187 @@ export default function DashboardPage() {
           <div className="px-4 py-6 text-sm text-text-muted">Lade Daten...</div>
         ) : (
           filteredContacts.map((contact) => {
-          const assignedLabelIds = contact.labels.map((label) => label.id);
-          const availableLabels = sortLabels(
-            labels.filter(
-              (label) => !label.is_archived && !assignedLabelIds.includes(label.id)
-            )
-          );
-          const availableLabelIds = availableLabels.map((label) => label.id);
-          const filteredAvailable = labelSearch
-            ? availableLabels.filter((label) =>
-                label.name.toLowerCase().includes(labelSearch.toLowerCase())
+            const assignedLabelIds = contact.labels.map((label) => label.id);
+            const availableLabels = sortLabels(
+              labels.filter(
+                (label) => !label.is_archived && !assignedLabelIds.includes(label.id)
               )
-            : availableLabels;
+            );
+            const availableLabelIds = availableLabels.map((label) => label.id);
+            const filteredAvailable = labelSearch
+              ? availableLabels.filter((label) =>
+                  label.name.toLowerCase().includes(labelSearch.toLowerCase())
+                )
+              : availableLabels;
+            const displayName = getContactDisplayName(contact);
 
-          const handleDragEnd = (event: DragEndEvent) => {
-            const { active, over } = event;
-            if (!over) return;
-            const labelId = String(active.id);
-            const overId = String(over.id);
-            const isOverAssigned =
-              overId === "assigned" || assignedLabelIds.includes(overId);
-            const isOverAvailable =
-              overId === "available" || availableLabelIds.includes(overId);
+            const handleDragEnd = (event: DragEndEvent) => {
+              const { active, over } = event;
+              if (!over) return;
+              const labelId = String(active.id);
+              const overId = String(over.id);
+              const isOverAssigned =
+                overId === "assigned" || assignedLabelIds.includes(overId);
+              const isOverAvailable =
+                overId === "available" || availableLabelIds.includes(overId);
 
-            if (isOverAssigned) {
-              if (assignedLabelIds.includes(labelId)) return;
-              const label = labels.find((item) => item.id === labelId);
-              if (label) handleAssignLabel(contact.id, label);
-              return;
-            }
-            if (isOverAvailable || overId === "remove") {
-              if (!assignedLabelIds.includes(labelId)) return;
-              handleRemoveLabel(contact.id, labelId);
-            }
-          };
+              if (isOverAssigned) {
+                if (assignedLabelIds.includes(labelId)) return;
+                const label = labels.find((item) => item.id === labelId);
+                if (label) handleAssignLabel(contact.id, label);
+                return;
+              }
+              if (isOverAvailable || overId === "remove") {
+                if (!assignedLabelIds.includes(labelId)) return;
+                handleRemoveLabel(contact.id, labelId);
+              }
+            };
 
-          return (
-            <div key={contact.id} className="border-b border-base-800">
-              <button
-                type="button"
-                onClick={() =>
-                  setExpandedId((prev) => (prev === contact.id ? null : contact.id))
-                }
-                className="grid w-full grid-cols-5 gap-4 px-4 py-3 text-left text-sm hover:bg-base-900/60"
-              >
-                <span>{contact.full_name || "Unbekannt"}</span>
-                <span>{contact.phone_e164}</span>
-                <span>{contact.location?.name ?? "-"}</span>
-                <span className="capitalize">
-                  {contact.status.replaceAll("_", " ")}
-                </span>
-                <span className="flex flex-wrap gap-2">
-                  {contact.labels.length ? (
-                    contact.labels.map((label) => (
-                      <Chip key={label.id} label={label.name} />
-                    ))
-                  ) : (
-                    <span className="text-xs text-text-muted">Keine Labels</span>
-                  )}
-                </span>
-              </button>
-              {expandedId === contact.id ? (
-                <div className="border-t border-base-800 bg-base-900/40 px-4 py-4">
-                  <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
-                    <div className="space-y-3">
-                      <label className="text-xs uppercase text-text-muted">Status</label>
-                      <select
-                        className="w-full rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
-                        value={contact.status}
-                        onChange={(event) =>
-                          handleStatusChange(contact.id, event.target.value)
-                        }
-                      >
-                        {statusOptions.map((status) => (
-                          <option key={status.value} value={status.value}>
-                            {status.label}
-                          </option>
-                        ))}
-                      </select>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          navigator.clipboard.writeText(contact.phone_e164)
-                        }
-                      >
-                        Nummer kopieren
-                      </Button>
-                      {savingId === contact.id ? (
-                        <p className="text-xs text-text-muted">Speichern...</p>
-                      ) : null}
-                    </div>
-                    <div className="space-y-4">
-                      <div>
+            return (
+              <div key={contact.id} className="border-b border-base-800">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedId((prev) => (prev === contact.id ? null : contact.id))
+                  }
+                  className="grid w-full grid-cols-5 gap-4 px-4 py-3 text-left text-sm hover:bg-base-900/60"
+                >
+                  <span>{displayName}</span>
+                  <span>{contact.phone_e164 ?? "—"}</span>
+                  <span>{contact.location?.name ?? "-"}</span>
+                  <span className="capitalize">
+                    {contact.status.replaceAll("_", " ")}
+                  </span>
+                  <span className="flex flex-wrap gap-2">
+                    {contact.labels.length ? (
+                      contact.labels.map((label) => (
+                        <Chip key={label.id} label={label.name} />
+                      ))
+                    ) : (
+                      <span className="text-xs text-text-muted">Keine Labels</span>
+                    )}
+                  </span>
+                </button>
+                {expandedId === contact.id ? (
+                  <div className="border-t border-base-800 bg-base-900/40 px-4 py-4">
+                    <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+                      <div className="space-y-3">
                         <label className="text-xs uppercase text-text-muted">
-                          Label suchen
+                          Status
                         </label>
-                        <Input
-                          placeholder="Label suchen..."
-                          value={labelSearch}
-                          onChange={(event) => setLabelSearch(event.target.value)}
-                        />
-                      </div>
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleDragEnd}
-                      >
-                        <div className="grid gap-4 lg:grid-cols-2">
-                          <DroppableZone id="available">
-                            <div className="mb-2 text-xs uppercase text-text-muted">
-                              Verfügbare Labels
-                            </div>
-                            <SortableContext
-                              items={filteredAvailable.map((label) => label.id)}
-                              strategy={verticalListSortingStrategy}
-                            >
-                              <div className="flex flex-wrap gap-2">
-                                {filteredAvailable.length ? (
-                                  filteredAvailable.map((label) => (
-                                    <SortableLabel
-                                      key={label.id}
-                                      id={label.id}
-                                      label={label.name}
-                                      onClick={() => handleAssignLabel(contact.id, label)}
-                                    />
-                                  ))
-                                ) : (
-                                  <span className="text-xs text-text-muted">
-                                    Keine Labels verfügbar
-                                  </span>
-                                )}
-                              </div>
-                            </SortableContext>
-                          </DroppableZone>
-                          <DroppableZone id="assigned">
-                            <div className="mb-2 text-xs uppercase text-text-muted">
-                              Labels dieses Kontakts
-                            </div>
-                            <SortableContext
-                              items={assignedLabelIds}
-                              strategy={verticalListSortingStrategy}
-                            >
-                              <div className="flex flex-wrap gap-2">
-                                {contact.labels.length ? (
-                                  contact.labels.map((label) => (
-                                    <SortableLabel
-                                      key={label.id}
-                                      id={label.id}
-                                      label={label.name}
-                                      onClick={() =>
-                                        handleRemoveLabel(contact.id, label.id)
-                                      }
-                                    />
-                                  ))
-                                ) : (
-                                  <span className="text-xs text-text-muted">
-                                    Noch keine Labels zugewiesen
-                                  </span>
-                                )}
-                              </div>
-                            </SortableContext>
-                          </DroppableZone>
-                        </div>
-                        <DroppableZone
-                          id="remove"
-                          className="mt-4 border-dashed text-xs text-text-muted"
+                        <select
+                          className="w-full rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
+                          value={contact.status}
+                          onChange={(event) =>
+                            handleStatusChange(contact.id, event.target.value)
+                          }
                         >
-                          Label hierhin ziehen zum Entfernen
-                        </DroppableZone>
-                      </DndContext>
+                          {statusOptions.map((status) => (
+                            <option key={status.value} value={status.value}>
+                              {status.label}
+                            </option>
+                          ))}
+                        </select>
+                        <Button
+                          variant="outline"
+                          onClick={() =>
+                            navigator.clipboard.writeText(contact.phone_e164 ?? "")
+                          }
+                        >
+                          Nummer kopieren
+                        </Button>
+                        {savingId === contact.id ? (
+                          <p className="text-xs text-text-muted">Speichern...</p>
+                        ) : null}
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-xs uppercase text-text-muted">
+                            Label suchen
+                          </label>
+                          <Input
+                            placeholder="Label suchen..."
+                            value={labelSearch}
+                            onChange={(event) => setLabelSearch(event.target.value)}
+                          />
+                        </div>
+                        <DndContext
+                          sensors={sensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={handleDragEnd}
+                        >
+                          <div className="grid gap-4 lg:grid-cols-2">
+                            <DroppableZone id="available">
+                              <div className="mb-2 text-xs uppercase text-text-muted">
+                                Verfügbare Labels
+                              </div>
+                              <SortableContext
+                                items={filteredAvailable.map((label) => label.id)}
+                                strategy={verticalListSortingStrategy}
+                              >
+                                <div className="flex flex-wrap gap-2">
+                                  {filteredAvailable.length ? (
+                                    filteredAvailable.map((label) => (
+                                      <SortableLabel
+                                        key={label.id}
+                                        id={label.id}
+                                        label={label.name}
+                                        onClick={() =>
+                                          handleAssignLabel(contact.id, label)
+                                        }
+                                      />
+                                    ))
+                                  ) : (
+                                    <span className="text-xs text-text-muted">
+                                      Keine Labels verfügbar
+                                    </span>
+                                  )}
+                                </div>
+                              </SortableContext>
+                            </DroppableZone>
+                            <DroppableZone id="assigned">
+                              <div className="mb-2 text-xs uppercase text-text-muted">
+                                Labels dieses Kontakts
+                              </div>
+                              <SortableContext
+                                items={assignedLabelIds}
+                                strategy={verticalListSortingStrategy}
+                              >
+                                <div className="flex flex-wrap gap-2">
+                                  {contact.labels.length ? (
+                                    contact.labels.map((label) => (
+                                      <SortableLabel
+                                        key={label.id}
+                                        id={label.id}
+                                        label={label.name}
+                                        onClick={() =>
+                                          handleRemoveLabel(contact.id, label.id)
+                                        }
+                                      />
+                                    ))
+                                  ) : (
+                                    <span className="text-xs text-text-muted">
+                                      Noch keine Labels zugewiesen
+                                    </span>
+                                  )}
+                                </div>
+                              </SortableContext>
+                            </DroppableZone>
+                          </div>
+                          <DroppableZone
+                            id="remove"
+                            className="mt-4 border-dashed text-xs text-text-muted"
+                          >
+                            Label hierhin ziehen zum Entfernen
+                          </DroppableZone>
+                        </DndContext>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : null}
-            </div>
-          );
-        })
+                ) : null}
+              </div>
+            );
+          })
         )}
       </section>
     </AppShell>

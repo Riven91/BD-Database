@@ -6,6 +6,24 @@ import { supabaseBrowser } from "@/lib/supabase/browserClient";
 import { AppShell } from "@/components/app-shell";
 import { Button, Chip, Input, Textarea } from "@/components/ui";
 
+function getContactDisplayName(contact: {
+  name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone_e164?: string | null;
+}) {
+  const combinedName = [contact.first_name, contact.last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  return (
+    contact.name ??
+    (combinedName.length > 0 ? combinedName : null) ??
+    contact.phone_e164 ??
+    "—"
+  );
+}
+
 export default function ContactDetailPage() {
   const params = useParams<{ id: string }>();
   const [contact, setContact] = useState<any | null>(null);
@@ -49,9 +67,10 @@ export default function ContactDetailPage() {
     .replaceAll("{vorname}", contact.first_name ?? "")
     .replaceAll("{standort}", contact.location?.name ?? "")
     .replaceAll("{telefon}", contact.phone_e164 ?? "");
+  const displayName = getContactDisplayName(contact);
 
   return (
-    <AppShell title={contact.full_name || "Kontakt"} subtitle={contact.location?.name ?? "-"}>
+    <AppShell title={displayName} subtitle={contact.location?.name ?? "-"}>
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="space-y-4 rounded-lg border border-base-800 bg-base-850 p-4 lg:col-span-2">
           <h2 className="text-lg font-semibold">Details</h2>
