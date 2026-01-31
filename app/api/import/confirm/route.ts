@@ -5,6 +5,8 @@ import type { NormalizedContact } from "@/lib/import-utils";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 async function getLocations(supabase: SupabaseClient) {
   const { data, error } = await supabase
@@ -41,6 +43,7 @@ function buildUpdatePayload(contact: NormalizedContact) {
 
 export async function POST(request: Request) {
   const { supabase, user } = await getSupabaseAuthed(request);
+  const requestId = crypto.randomUUID?.() ?? String(Date.now());
   if (!user) {
     return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }
@@ -48,14 +51,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     const contacts: NormalizedContact[] = body.contacts ?? [];
     if (!contacts.length) {
+      const processed = 0;
+      const errorCount = 0;
       return NextResponse.json({
+        finished: true,
+        requestId,
         created: 0,
         updated: 0,
         skipped: 0,
-        errors: [],
-        finished: true,
-        processed: 0,
-        errorCount: 0
+        processed,
+        errorCount,
+        errors: []
       });
     }
 
@@ -64,9 +70,24 @@ export async function POST(request: Request) {
     let created = 0;
     let updated = 0;
     let skipped = 0;
+    let processed = 0;
     const errors: { row?: number; phone?: string; message: string }[] = [];
 
+    const logProgress = () => {
+      if (processed % 50 === 0) {
+        console.log("IMPORT_CONFIRM_PROGRESS", {
+          requestId,
+          processed,
+          created,
+          updated,
+          skipped,
+          errors: errors.length
+        });
+      }
+    };
+
     for (const contact of contacts) {
+      processed += 1;
       const row = contact.source_row;
       const locationName = contact.location_name?.trim() || "Unbekannt";
       const locationKey = locationName.toLowerCase();
@@ -80,6 +101,7 @@ export async function POST(request: Request) {
         if (error) {
           errors.push({ row, phone: contact.phone_e164, message: error.message });
           skipped += 1;
+          logProgress();
           continue;
         }
         locationMap.set(newLocation.name.toLowerCase(), {
@@ -96,6 +118,7 @@ export async function POST(request: Request) {
           message: `Standort ${locationName} nicht gefunden`
         });
         skipped += 1;
+        logProgress();
         continue;
       }
 
@@ -108,6 +131,7 @@ export async function POST(request: Request) {
       if (existingError) {
         errors.push({ row, phone: contact.phone_e164, message: existingError.message });
         skipped += 1;
+        logProgress();
         continue;
       }
 
@@ -124,6 +148,7 @@ export async function POST(request: Request) {
       if (upsertError) {
         errors.push({ row, phone: contact.phone_e164, message: upsertError.message });
         skipped += 1;
+        logProgress();
         continue;
       }
 
@@ -175,21 +200,32 @@ export async function POST(request: Request) {
           }
         }
       }
+
+      logProgress();
     }
 
+    const errorCount = errors.length;
     return NextResponse.json({
+      finished: true,
+      requestId,
       created,
       updated,
       skipped,
-      errors: errors.slice(0, 10),
-      finished: true,
-      processed: created + updated + skipped,
-      errorCount: errors.length
+      processed,
+      errorCount,
+      errors: errors.slice(0, 50)
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Import fehlgeschlagen";
+    const parsed = error instanceof Error ? undefined : error;
     return NextResponse.json(
-      { error: message, finished: false },
+      {
+        finished: false,
+        requestId,
+        error: "import_failed",
+        message,
+        ...(parsed === undefined ? {} : { parsed })
+      },
       { status: 500 }
     );
   }
