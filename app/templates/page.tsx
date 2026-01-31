@@ -9,7 +9,6 @@ type Template = {
   id: string;
   title: string;
   body: string;
-  is_archived: boolean;
 };
 
 export default function TemplatesPage() {
@@ -55,22 +54,6 @@ export default function TemplatesPage() {
     setTitle("");
     setBody("");
     setEditingId(null);
-    setErrorMessage("");
-    loadTemplates();
-  };
-
-  const toggleArchive = async (templateId: string, nextState: boolean) => {
-    const response = await fetchWithAuth(`/api/templates/${templateId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_archived: nextState })
-    });
-    if (!response.ok) {
-      const text = await response.text();
-      console.error(`Template update failed (HTTP ${response.status})`, text);
-      setErrorMessage(`HTTP ${response.status}: ${text}`);
-      return;
-    }
     setErrorMessage("");
     loadTemplates();
   };
@@ -163,12 +146,6 @@ export default function TemplatesPage() {
                     <div className="flex flex-wrap gap-2">
                       <Button variant="secondary" onClick={() => handleSelect(template)}>
                         Bearbeiten
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => toggleArchive(template.id, !template.is_archived)}
-                      >
-                        {template.is_archived ? "Reaktivieren" : "Archivieren"}
                       </Button>
                       <Button variant="outline" onClick={() => handleDelete(template.id)}>
                         Löschen

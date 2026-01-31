@@ -34,8 +34,6 @@ const statusOptions = [
 type Label = {
   id: string;
   name: string;
-  sort_order: number;
-  is_archived: boolean;
 };
 
 type Contact = {
@@ -65,10 +63,7 @@ function normalizeLocationName(value?: string | null) {
 }
 
 function sortLabels(labels: Label[]) {
-  return [...labels].sort((a, b) => {
-    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-    return a.name.localeCompare(b.name);
-  });
+  return [...labels].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function DroppableZone({
@@ -283,7 +278,7 @@ export default function DashboardPage() {
           ))}
         </select>
         <div className="flex flex-wrap gap-2">
-          {sortLabels(labels.filter((label) => !label.is_archived)).map((label) => (
+          {sortLabels(labels).map((label) => (
             <button
               key={label.id}
               type="button"
@@ -315,9 +310,7 @@ export default function DashboardPage() {
           filteredContacts.map((contact) => {
           const assignedLabelIds = contact.labels.map((label) => label.id);
           const availableLabels = sortLabels(
-            labels.filter(
-              (label) => !label.is_archived && !assignedLabelIds.includes(label.id)
-            )
+            labels.filter((label) => !assignedLabelIds.includes(label.id))
           );
           const availableLabelIds = availableLabels.map((label) => label.id);
           const filteredAvailable = labelSearch

@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("contacts")
     .select(
-      "id, full_name, phone_e164, status, location:locations(name), labels:contact_labels(labels(id,name,sort_order,is_archived))"
+      "id, full_name, phone_e164, status, location:locations(name), labels:contact_labels(labels(id,name))"
     )
     .order("updated_at", { ascending: false })
     .limit(300);
