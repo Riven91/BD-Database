@@ -8,8 +8,6 @@ import { fetchWithAuth } from "@/lib/fetchWithAuth";
 type Label = {
   id: string;
   name: string;
-  sort_order: number;
-  is_archived: boolean;
 };
 
 export default function LabelsPage() {
@@ -18,7 +16,7 @@ export default function LabelsPage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const loadLabels = async () => {
-    const response = await fetchWithAuth("/api/labels?includeArchived=true");
+    const response = await fetchWithAuth("/api/labels");
     if (!response.ok) return;
     const payload = await response.json();
     setLabels(payload.labels ?? []);
@@ -108,12 +106,6 @@ export default function LabelsPage() {
               }
             >
               Speichern
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => updateLabel(label.id, { is_archived: !label.is_archived })}
-            >
-              {label.is_archived ? "Reaktivieren" : "Archivieren"}
             </Button>
           </div>
         ))}

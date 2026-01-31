@@ -44,8 +44,16 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }
+  let body: { contacts?: NormalizedContact[] };
   try {
-    const body = await request.json();
+    body = await request.json();
+  } catch (error) {
+    return NextResponse.json(
+      { error: "bad_request", message: String(error) },
+      { status: 400 }
+    );
+  }
+  try {
     const contacts: NormalizedContact[] = body.contacts ?? [];
     if (!contacts.length) {
       return NextResponse.json({ created: 0, updated: 0, skipped: 0, errors: [] });
@@ -114,9 +122,10 @@ export async function POST(request: Request) {
         .single();
 
       if (upsertError) {
-        errors.push({ row, phone: contact.phone_e164, message: upsertError.message });
-        skipped += 1;
-        continue;
+        return NextResponse.json(
+          { error: "db_error", details: upsertError },
+          { status: 500 }
+        );
       }
 
       if (existing) {
@@ -145,12 +154,10 @@ export async function POST(request: Request) {
               .select("id, name")
               .single();
             if (labelError || !createdLabel) {
-              errors.push({
-                row,
-                phone: contact.phone_e164,
-                message: labelError?.message ?? "Label konnte nicht erstellt werden"
-              });
-              continue;
+              return NextResponse.json(
+                { error: "db_error", details: labelError },
+                { status: 500 }
+              );
             }
             labelId = createdLabel.id;
             labelMap.set(createdLabel.name.toLowerCase(), createdLabel.id);
@@ -159,11 +166,10 @@ export async function POST(request: Request) {
             .from("contact_labels")
             .upsert({ contact_id: contactRow.id, label_id: labelId });
           if (linkError) {
-            errors.push({
-              row,
-              phone: contact.phone_e164,
-              message: linkError.message
-            });
+            return NextResponse.json(
+              { error: "db_error", details: linkError },
+              { status: 500 }
+            );
           }
         }
       }

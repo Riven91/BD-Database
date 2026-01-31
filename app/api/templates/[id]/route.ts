@@ -17,7 +17,6 @@ export async function PATCH(
   const updates: Record<string, unknown> = {};
   if (typeof body.title === "string") updates.title = body.title.trim();
   if (typeof body.body === "string") updates.body = body.body.trim();
-  if (typeof body.is_archived === "boolean") updates.is_archived = body.is_archived;
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "No updates" }, { status: 400 });
@@ -27,7 +26,7 @@ export async function PATCH(
     .from("message_templates")
     .update(updates)
     .eq("id", params.id)
-    .select("id, title, body, is_archived, created_at")
+    .select("id, title, body, created_at")
     .single();
 
   if (error) {

@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase
     .from("message_templates")
-    .select("id, title, body, is_archived, created_at")
+    .select("id, title, body, created_at")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from("message_templates")
     .insert({ title, body: templateBody })
-    .select("id, title, body, is_archived, created_at")
+    .select("id, title, body, created_at")
     .single();
 
   if (error) {

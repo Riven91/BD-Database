@@ -28,8 +28,7 @@ export default function ContactDetailPage() {
       setNotes(contactData?.notes ?? "");
       const { data: templatesData } = await supabase
         .from("message_templates")
-        .select("id, title, body")
-        .eq("is_archived", false);
+        .select("id, title, body");
       setTemplates(templatesData ?? []);
     };
     load();

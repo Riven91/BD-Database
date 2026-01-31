@@ -18,15 +18,6 @@ export async function PATCH(
   if (typeof body.name === "string") {
     updates.name = body.name.trim();
   }
-  if (body.sort_order !== undefined) {
-    const sortOrder = Number(body.sort_order);
-    if (!Number.isNaN(sortOrder)) {
-      updates.sort_order = sortOrder;
-    }
-  }
-  if (typeof body.is_archived === "boolean") {
-    updates.is_archived = body.is_archived;
-  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "No updates" }, { status: 400 });

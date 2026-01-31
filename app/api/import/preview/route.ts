@@ -10,7 +10,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }
 
-  const body = await request.json();
+  let body: { phones?: string[] };
+  try {
+    body = await request.json();
+  } catch (error) {
+    return NextResponse.json(
+      { error: "bad_request", message: String(error) },
+      { status: 400 }
+    );
+  }
+
   const phones: string[] = body.phones ?? [];
   if (!phones.length) {
     return NextResponse.json({ existing: [] });
