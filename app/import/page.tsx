@@ -6,7 +6,7 @@ import * as XLSX from "xlsx";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui";
 import { mapRow, type CsvRow, type NormalizedContact } from "@/lib/import-utils";
-import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { getPlainSupabaseBrowser } from "@/lib/supabase/plainBrowserClient";
 
 type PreviewStats = {
   newCount: number;
@@ -84,26 +84,35 @@ export default function ImportPage() {
     });
 
     const phones = contacts.map((contact) => contact.phone_e164);
-    const response = await fetchWithAuth("/api/import/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phones })
-    });
-    if (!response.ok) {
-      const text = await response.text();
-      console.error(`Import preview failed (HTTP ${response.status})`, text);
-      setErrorMessage(`HTTP ${response.status}: ${text}`);
-      return;
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const supabase = getPlainSupabaseBrowser();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("not_authenticated");
+      const response = await fetch("/api/import/preview", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const existing = await response.json();
+      if (!response.ok) {
+        throw new Error(JSON.stringify(existing));
+      }
+      const existingSet = new Set(existing.existing ?? []);
+
+      const newCount = phones.filter((phone) => !existingSet.has(phone)).length;
+      const updateCount = phones.filter((phone) => existingSet.has(phone)).length;
+
+      setPreviewContacts(contacts);
+      setPreviewStats({ newCount, updateCount, errors: issues });
+      setPreviewRows(preview.slice(0, 50));
+    } catch (error) {
+      console.error("Import preview failed", error);
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-    const existing = await response.json();
-    const existingSet = new Set(existing.existing ?? []);
-
-    const newCount = phones.filter((phone) => !existingSet.has(phone)).length;
-    const updateCount = phones.filter((phone) => existingSet.has(phone)).length;
-
-    setPreviewContacts(contacts);
-    setPreviewStats({ newCount, updateCount, errors: issues });
-    setPreviewRows(preview.slice(0, 50));
   };
 
   const handleConfirm = async () => {
@@ -111,12 +120,24 @@ export default function ImportPage() {
     setErrorMessage("");
     setImportResult(null);
     setImportResultText(null);
-    const response = await fetchWithAuth("/api/import/confirm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts: previewContacts })
-    });
-    if (response.ok) {
+    try {
+      const supabase = getPlainSupabaseBrowser();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("not_authenticated");
+      const response = await fetch("/api/import/confirm", {
+        method: "POST",
+        body: JSON.stringify({ contacts: previewContacts }),
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        const errorPayload = await response.json();
+        throw new Error(JSON.stringify(errorPayload));
+      }
       const bodyText = await response.text();
       try {
         const payload = JSON.parse(bodyText);
@@ -136,12 +157,12 @@ export default function ImportPage() {
         setImportResultText(bodyText);
       }
       router.refresh();
-    } else {
-      const text = await response.text();
-      console.error(`Import confirm failed (HTTP ${response.status})`, text);
-      setErrorMessage(`HTTP ${response.status}: ${text}`);
+    } catch (error) {
+      console.error("Import confirm failed", error);
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsImporting(false);
     }
-    setIsImporting(false);
   };
 
   return (
