@@ -134,32 +134,17 @@ export default function ImportPage() {
           Authorization: `Bearer ${token}`
         }
       });
+      const payload = await response.json();
       if (!response.ok) {
-        const errorPayload = await response.json();
-        throw new Error(JSON.stringify(errorPayload));
+        throw new Error(JSON.stringify(payload));
       }
-      const bodyText = await response.text();
-      try {
-        const payload = JSON.parse(bodyText);
-        if (
-          payload &&
-          typeof payload === "object" &&
-          "created" in payload &&
-          "updated" in payload &&
-          "skipped" in payload
-        ) {
-          setImportResult(payload);
-        } else {
-          setImportResultText(bodyText);
-        }
-      } catch (error) {
-        console.error("Import confirm response parse failed", error);
-        setImportResultText(bodyText);
-      }
+      setImportResult(payload);
+      setImportResultText("Import abgeschlossen");
       router.refresh();
     } catch (error) {
       console.error("Import confirm failed", error);
       setErrorMessage(error instanceof Error ? error.message : String(error));
+      setImportResultText("Import fehlgeschlagen");
     } finally {
       setIsImporting(false);
     }
