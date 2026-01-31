@@ -48,7 +48,15 @@ export async function POST(request: Request) {
     const body = await request.json();
     const contacts: NormalizedContact[] = body.contacts ?? [];
     if (!contacts.length) {
-      return NextResponse.json({ created: 0, updated: 0, skipped: 0, errors: [] });
+      return NextResponse.json({
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [],
+        finished: true,
+        processed: 0,
+        errorCount: 0
+      });
     }
 
     const locationMap = await getLocations(supabase);
@@ -173,10 +181,16 @@ export async function POST(request: Request) {
       created,
       updated,
       skipped,
-      errors: errors.slice(0, 10)
+      errors: errors.slice(0, 10),
+      finished: true,
+      processed: created + updated + skipped,
+      errorCount: errors.length
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Import fehlgeschlagen";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: message, finished: false },
+      { status: 500 }
+    );
   }
 }
