@@ -6,11 +6,26 @@ import type { NormalizedContact } from "@/lib/import-utils";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+function serializeSupaError(err: any) {
+  if (!err) return null;
+  return {
+    message: err.message ?? String(err),
+    details: err.details ?? null,
+    hint: err.hint ?? null,
+    code: err.code ?? null,
+    status: err.status ?? null
+  };
+}
+
 async function getLocations(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from("locations")
     .select("id, name, is_admin_only");
-  if (error) throw new Error(error.message);
+  if (error) {
+    throw new Error(
+      JSON.stringify({ where: "getLocations.select", ...serializeSupaError(error) })
+    );
+  }
   const map = new Map<string, { id: string; is_admin_only: boolean }>();
   (data ?? []).forEach((location) => {
     map.set(location.name.toLowerCase(), {
@@ -23,7 +38,11 @@ async function getLocations(supabase: SupabaseClient) {
 
 async function getLabels(supabase: SupabaseClient) {
   const { data, error } = await supabase.from("labels").select("id, name");
-  if (error) throw new Error(error.message);
+  if (error) {
+    throw new Error(
+      JSON.stringify({ where: "getLabels.select", ...serializeSupaError(error) })
+    );
+  }
   const map = new Map<string, string>();
   (data ?? []).forEach((label) => map.set(label.name.toLowerCase(), label.id));
   return map;
@@ -56,7 +75,16 @@ export async function POST(request: Request) {
     let created = 0;
     let updated = 0;
     let skipped = 0;
-    const errors: { row?: number; phone?: string; message: string }[] = [];
+    const errors: {
+      row?: number;
+      phone?: string;
+      where?: string;
+      message?: string;
+      details?: string | null;
+      hint?: string | null;
+      code?: string | null;
+      status?: number | null;
+    }[] = [];
 
     for (const contact of contacts) {
       const row = contact.source_row;
@@ -70,7 +98,12 @@ export async function POST(request: Request) {
           .select("id, name, is_admin_only")
           .single();
         if (error) {
-          errors.push({ row, phone: contact.phone_e164, message: error.message });
+          errors.push({
+            row,
+            phone: contact.phone_e164,
+            where: "locations.insert",
+            ...serializeSupaError(error)
+          });
           skipped += 1;
           continue;
         }
@@ -98,7 +131,12 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (existingError) {
-        errors.push({ row, phone: contact.phone_e164, message: existingError.message });
+        errors.push({
+          row,
+          phone: contact.phone_e164,
+          where: "contacts.select_existing",
+          ...serializeSupaError(existingError)
+        });
         skipped += 1;
         continue;
       }
@@ -114,7 +152,12 @@ export async function POST(request: Request) {
         .single();
 
       if (upsertError) {
-        errors.push({ row, phone: contact.phone_e164, message: upsertError.message });
+        errors.push({
+          row,
+          phone: contact.phone_e164,
+          where: "contacts.upsert",
+          ...serializeSupaError(upsertError)
+        });
         skipped += 1;
         continue;
       }
@@ -132,7 +175,12 @@ export async function POST(request: Request) {
           .eq("phone_e164", contact.phone_e164)
           .single();
         if (contactError) {
-          errors.push({ row, phone: contact.phone_e164, message: contactError.message });
+          errors.push({
+            row,
+            phone: contact.phone_e164,
+            where: "contacts.select_after_upsert",
+            ...serializeSupaError(contactError)
+          });
           continue;
         }
         for (const label of contact.labels) {
@@ -148,7 +196,10 @@ export async function POST(request: Request) {
               errors.push({
                 row,
                 phone: contact.phone_e164,
-                message: labelError?.message ?? "Label konnte nicht erstellt werden"
+                where: "labels.upsert",
+                ...(labelError
+                  ? serializeSupaError(labelError)
+                  : { message: "Label konnte nicht erstellt werden" })
               });
               continue;
             }
@@ -157,12 +208,16 @@ export async function POST(request: Request) {
           }
           const { error: linkError } = await supabase
             .from("contact_labels")
-            .upsert({ contact_id: contactRow.id, label_id: labelId });
+            .upsert(
+              { contact_id: contactRow.id, label_id: labelId },
+              { onConflict: "contact_id,label_id" }
+            );
           if (linkError) {
             errors.push({
               row,
               phone: contact.phone_e164,
-              message: linkError.message
+              where: "contact_labels.upsert",
+              ...serializeSupaError(linkError)
             });
           }
         }
@@ -173,10 +228,15 @@ export async function POST(request: Request) {
       created,
       updated,
       skipped,
-      errors: errors.slice(0, 10)
+      errors: errors.slice(0, 50)
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Import fehlgeschlagen";
-    return NextResponse.json({ error: message }, { status: 500 });
+    try {
+      const parsed = JSON.parse(message);
+      return NextResponse.json({ error: "import_failed", ...parsed }, { status: 500 });
+    } catch {
+      return NextResponse.json({ error: "import_failed", message }, { status: 500 });
+    }
   }
 }
