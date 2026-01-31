@@ -23,6 +23,8 @@ type PreviewRow = {
   isValid: boolean;
 };
 
+const START_BATCH = 1; // 1-based; set to 1 normally
+
 function chunk<T>(arr: T[], size: number) {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -133,13 +135,14 @@ export default function ImportPage() {
       const token = data.session?.access_token;
       if (!token) throw new Error("not_authenticated");
       const batches = chunk(previewContacts, 200);
+      console.log("CONFIRM:resume", { START_BATCH, total: batches.length });
       const totals = {
         created: 0,
         updated: 0,
         skipped: 0,
         errors: [] as { row?: number; phone?: string; message: string }[]
       };
-      for (let i = 0; i < batches.length; i += 1) {
+      for (let i = START_BATCH - 1; i < batches.length; i += 1) {
         const batch = batches[i];
         console.log(`CONFIRM:batch ${i + 1}/${batches.length}`, { count: batch.length });
         const total = batches.length;
