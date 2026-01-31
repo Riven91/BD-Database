@@ -10,7 +10,7 @@ async function getLocations(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from("locations")
     .select("id, name, is_admin_only");
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(`getLocations:${JSON.stringify(supaErr(error))}`);
   const map = new Map<string, { id: string; is_admin_only: boolean }>();
   (data ?? []).forEach((location) => {
     map.set(location.name.toLowerCase(), {
@@ -23,7 +23,7 @@ async function getLocations(supabase: SupabaseClient) {
 
 async function getLabels(supabase: SupabaseClient) {
   const { data, error } = await supabase.from("labels").select("id, name");
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(`getLabels:${JSON.stringify(supaErr(error))}`);
   const map = new Map<string, string>();
   (data ?? []).forEach((label) => map.set(label.name.toLowerCase(), label.id));
   return map;
@@ -37,6 +37,17 @@ function buildUpdatePayload(contact: NormalizedContact) {
     payload[key] = value;
   });
   return payload;
+}
+
+function supaErr(error: any) {
+  if (!error) return null;
+  return {
+    message: error.message ?? String(error),
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+    code: error.code ?? null,
+    status: error.status ?? null
+  };
 }
 
 export async function POST(request: Request) {
@@ -56,7 +67,16 @@ export async function POST(request: Request) {
     let created = 0;
     let updated = 0;
     let skipped = 0;
-    const errors: { row?: number; phone?: string; message: string }[] = [];
+    const errors: {
+      row?: number;
+      phone?: string;
+      where?: string;
+      message?: string;
+      details?: string | null;
+      hint?: string | null;
+      code?: string | null;
+      status?: number | null;
+    }[] = [];
 
     for (const contact of contacts) {
       const row = contact.source_row;
@@ -70,7 +90,12 @@ export async function POST(request: Request) {
           .select("id, name, is_admin_only")
           .single();
         if (error) {
-          errors.push({ row, phone: contact.phone_e164, message: error.message });
+          errors.push({
+            row,
+            phone: contact.phone_e164,
+            where: "locations.insert",
+            ...supaErr(error)
+          });
           skipped += 1;
           continue;
         }
@@ -85,6 +110,7 @@ export async function POST(request: Request) {
         errors.push({
           row,
           phone: contact.phone_e164,
+          where: "locations.lookup",
           message: `Standort ${locationName} nicht gefunden`
         });
         skipped += 1;
@@ -98,7 +124,12 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (existingError) {
-        errors.push({ row, phone: contact.phone_e164, message: existingError.message });
+        errors.push({
+          row,
+          phone: contact.phone_e164,
+          where: "contacts.select",
+          ...supaErr(existingError)
+        });
         skipped += 1;
         continue;
       }
@@ -114,7 +145,12 @@ export async function POST(request: Request) {
         .single();
 
       if (upsertError) {
-        errors.push({ row, phone: contact.phone_e164, message: upsertError.message });
+        errors.push({
+          row,
+          phone: contact.phone_e164,
+          where: "contacts.upsert",
+          ...supaErr(upsertError)
+        });
         skipped += 1;
         continue;
       }
@@ -129,10 +165,15 @@ export async function POST(request: Request) {
         const { data: contactRow, error: contactError } = await supabase
           .from("contacts")
           .select("id")
-          .eq("phone_e164", contact.phone_e164)
-          .single();
+        .eq("phone_e164", contact.phone_e164)
+        .single();
         if (contactError) {
-          errors.push({ row, phone: contact.phone_e164, message: contactError.message });
+          errors.push({
+            row,
+            phone: contact.phone_e164,
+            where: "contacts.select_for_labels",
+            ...supaErr(contactError)
+          });
           continue;
         }
         for (const label of contact.labels) {
@@ -148,7 +189,10 @@ export async function POST(request: Request) {
               errors.push({
                 row,
                 phone: contact.phone_e164,
-                message: labelError?.message ?? "Label konnte nicht erstellt werden"
+                where: "labels.upsert",
+                ...(labelError
+                  ? supaErr(labelError)
+                  : { message: "Label konnte nicht erstellt werden" })
               });
               continue;
             }
@@ -162,7 +206,8 @@ export async function POST(request: Request) {
             errors.push({
               row,
               phone: contact.phone_e164,
-              message: linkError.message
+              where: "contact_labels.upsert",
+              ...supaErr(linkError)
             });
           }
         }
@@ -173,10 +218,13 @@ export async function POST(request: Request) {
       created,
       updated,
       skipped,
-      errors: errors.slice(0, 10)
+      errors: errors.slice(0, 20)
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Import fehlgeschlagen";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "import_failed", message, stack: (error as Error).stack ?? null },
+      { status: 500 }
+    );
   }
 }
