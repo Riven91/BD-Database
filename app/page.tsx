@@ -132,6 +132,10 @@ export default function DashboardPage() {
   const [labelFilters, setLabelFilters] = useState<string[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
+  const [contactsError, setContactsError] = useState<{
+    message: string;
+    code?: string | null;
+  } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [labelSearch, setLabelSearch] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -142,19 +146,33 @@ export default function DashboardPage() {
     setIsLoading(true);
     const locationParam =
       locationValue !== "all" ? `?location=${encodeURIComponent(locationValue)}` : "";
-    const [contactsResponse, labelsResponse] = await Promise.all([
-      fetchWithAuth(`/api/contacts${locationParam}`),
-      fetchWithAuth("/api/labels")
-    ]);
-    if (contactsResponse.ok) {
-      const payload = await contactsResponse.json();
-      setContacts(payload.contacts ?? []);
+    try {
+      const [contactsResponse, labelsResponse] = await Promise.all([
+        fetchWithAuth(`/api/contacts${locationParam}`),
+        fetchWithAuth("/api/labels")
+      ]);
+      if (contactsResponse.ok) {
+        const payload = await contactsResponse.json();
+        setContacts(payload.contacts ?? []);
+        setContactsError(null);
+      } else {
+        const payload = await contactsResponse
+          .json()
+          .catch(() => ({ error: { message: "Failed to load contacts." } }));
+        const error =
+          typeof payload?.error === "string"
+            ? { message: payload.error }
+            : payload?.error ?? { message: "Failed to load contacts." };
+        console.error("DASHBOARD_CONTACTS_ERROR", error);
+        setContactsError({ message: error.message, code: error.code ?? null });
+      }
+      if (labelsResponse.ok) {
+        const payload = await labelsResponse.json();
+        setLabels(payload.labels ?? []);
+      }
+    } finally {
+      setIsLoading(false);
     }
-    if (labelsResponse.ok) {
-      const payload = await labelsResponse.json();
-      setLabels(payload.labels ?? []);
-    }
-    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -300,6 +318,13 @@ export default function DashboardPage() {
           ))}
         </div>
       </section>
+
+      {contactsError ? (
+        <div className="mb-4 rounded-lg border border-amber-500/60 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          Fehler beim Laden der Kontakte: {contactsError.message}
+          {contactsError.code ? ` (${contactsError.code})` : null}
+        </div>
+      ) : null}
 
       <section className="rounded-lg border border-base-800 bg-base-850">
         <div className="grid grid-cols-5 gap-4 border-b border-base-800 px-4 py-3 text-xs uppercase text-text-muted">

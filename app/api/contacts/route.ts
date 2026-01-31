@@ -28,8 +28,13 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const locationFilter = normalizeLocationParam(url.searchParams.get("location"));
-  if (url.searchParams.has("location") && !locationFilter) {
+  const rawLocationParam = url.searchParams.get("location");
+  const locationFilter = normalizeLocationParam(rawLocationParam);
+  if (
+    url.searchParams.has("location") &&
+    !locationFilter &&
+    rawLocationParam?.toLowerCase() !== "all"
+  ) {
     return NextResponse.json({ error: "Invalid location filter" }, { status: 400 });
   }
 
@@ -38,8 +43,8 @@ export async function GET(request: Request) {
     .select(
       "id, full_name, phone_e164, status, location:locations(name), labels:contact_labels(labels(id,name,sort_order,is_archived))"
     )
-    .order("updated_at", { ascending: false })
-    .limit(300);
+    .order("created_at", { ascending: false })
+    .range(0, 199);
 
   if (locationFilter) {
     query = query.eq("locations.name", locationFilter);
@@ -48,7 +53,10 @@ export async function GET(request: Request) {
   const { data, error } = await query;
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: { message: error.message, code: error.code ?? null } },
+      { status: 500 }
+    );
   }
 
   const contacts = (data ?? []).map((contact: any) => ({
