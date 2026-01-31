@@ -85,28 +85,28 @@ export default function ImportPage() {
     const phones = contacts.map((contact) => contact.phone_e164);
     const formData = new FormData();
     formData.append("file", file);
-    const response = await fetch("/api/import/preview", {
-      method: "POST",
-      body: formData,
-      credentials: "include"
-    });
-    const existing = await response.json();
-    if (!response.ok) {
-      console.error(
-        `Import preview failed (HTTP ${response.status})`,
-        existing
-      );
-      setErrorMessage(`HTTP ${response.status}: ${JSON.stringify(existing)}`);
-      return;
+    try {
+      const response = await fetch("/api/import/preview", {
+        method: "POST",
+        body: formData,
+        credentials: "include"
+      });
+      const existing = await response.json();
+      if (!response.ok) {
+        throw new Error(JSON.stringify(existing));
+      }
+      const existingSet = new Set(existing.existing ?? []);
+
+      const newCount = phones.filter((phone) => !existingSet.has(phone)).length;
+      const updateCount = phones.filter((phone) => existingSet.has(phone)).length;
+
+      setPreviewContacts(contacts);
+      setPreviewStats({ newCount, updateCount, errors: issues });
+      setPreviewRows(preview.slice(0, 50));
+    } catch (error) {
+      console.error("Import preview failed", error);
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-    const existingSet = new Set(existing.existing ?? []);
-
-    const newCount = phones.filter((phone) => !existingSet.has(phone)).length;
-    const updateCount = phones.filter((phone) => existingSet.has(phone)).length;
-
-    setPreviewContacts(contacts);
-    setPreviewStats({ newCount, updateCount, errors: issues });
-    setPreviewRows(preview.slice(0, 50));
   };
 
   const handleConfirm = async () => {
@@ -114,12 +114,17 @@ export default function ImportPage() {
     setErrorMessage("");
     setImportResult(null);
     setImportResultText(null);
-    const response = await fetchWithAuth("/api/import/confirm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts: previewContacts })
-    });
-    if (response.ok) {
+    try {
+      const response = await fetch("/api/import/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contacts: previewContacts }),
+        credentials: "include"
+      });
+      if (!response.ok) {
+        const errorPayload = await response.json();
+        throw new Error(JSON.stringify(errorPayload));
+      }
       const bodyText = await response.text();
       try {
         const payload = JSON.parse(bodyText);
@@ -139,12 +144,12 @@ export default function ImportPage() {
         setImportResultText(bodyText);
       }
       router.refresh();
-    } else {
-      const text = await response.text();
-      console.error(`Import confirm failed (HTTP ${response.status})`, text);
-      setErrorMessage(`HTTP ${response.status}: ${text}`);
+    } catch (error) {
+      console.error("Import confirm failed", error);
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsImporting(false);
     }
-    setIsImporting(false);
   };
 
   return (
