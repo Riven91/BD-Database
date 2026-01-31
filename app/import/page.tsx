@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui";
 import { mapRow, type CsvRow, type NormalizedContact } from "@/lib/import-utils";
+import { getPlainSupabaseBrowser } from "@/lib/supabase/plainBrowserClient";
 
 type PreviewStats = {
   newCount: number;
@@ -86,10 +87,15 @@ export default function ImportPage() {
     const formData = new FormData();
     formData.append("file", file);
     try {
+      const supabase = getPlainSupabaseBrowser();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("not_authenticated");
       const response = await fetch("/api/import/preview", {
         method: "POST",
         body: formData,
-        credentials: "include"
+        credentials: "include",
+        headers: { Authorization: `Bearer ${token}` }
       });
       const existing = await response.json();
       if (!response.ok) {
@@ -115,11 +121,18 @@ export default function ImportPage() {
     setImportResult(null);
     setImportResultText(null);
     try {
+      const supabase = getPlainSupabaseBrowser();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("not_authenticated");
       const response = await fetch("/api/import/confirm", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contacts: previewContacts }),
-        credentials: "include"
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
       });
       if (!response.ok) {
         const errorPayload = await response.json();
