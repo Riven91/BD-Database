@@ -6,7 +6,6 @@ import * as XLSX from "xlsx";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui";
 import { mapRow, type CsvRow, type NormalizedContact } from "@/lib/import-utils";
-import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 type PreviewStats = {
   newCount: number;
@@ -84,18 +83,22 @@ export default function ImportPage() {
     });
 
     const phones = contacts.map((contact) => contact.phone_e164);
-    const response = await fetchWithAuth("/api/import/preview", {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await fetch("/api/import/preview", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phones })
+      body: formData,
+      credentials: "include"
     });
+    const existing = await response.json();
     if (!response.ok) {
-      const text = await response.text();
-      console.error(`Import preview failed (HTTP ${response.status})`, text);
-      setErrorMessage(`HTTP ${response.status}: ${text}`);
+      console.error(
+        `Import preview failed (HTTP ${response.status})`,
+        existing
+      );
+      setErrorMessage(`HTTP ${response.status}: ${JSON.stringify(existing)}`);
       return;
     }
-    const existing = await response.json();
     const existingSet = new Set(existing.existing ?? []);
 
     const newCount = phones.filter((phone) => !existingSet.has(phone)).length;
