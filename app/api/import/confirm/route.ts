@@ -139,7 +139,7 @@ export async function POST(request: Request) {
       payload.location_id = resolvedLocation.id;
       payload.phone_e164 = contact.phone_e164;
 
-      const { error: upsertError } = await supabase
+      const { data: upserted, error: upsertError } = await supabase
         .from("contacts")
         .upsert(payload, { onConflict: "phone_e164" })
         .select("id, phone_e164")
@@ -158,16 +158,8 @@ export async function POST(request: Request) {
         created += 1;
       }
 
-      if (contact.labels?.length) {
-        const { data: contactRow, error: contactError } = await supabase
-          .from("contacts")
-          .select("id")
-          .eq("phone_e164", contact.phone_e164)
-          .single();
-        if (contactError) {
-          errors.push({ row, phone: contact.phone_e164, message: contactError.message });
-          continue;
-        }
+      const contactId = upserted?.id;
+      if (contact.labels?.length && contactId) {
         for (const label of contact.labels) {
           const normalized = label.toLowerCase();
           let labelId = labelMap.get(normalized);
@@ -190,7 +182,7 @@ export async function POST(request: Request) {
           }
           const { error: linkError } = await supabase
             .from("contact_labels")
-            .upsert({ contact_id: contactRow.id, label_id: labelId });
+            .upsert({ contact_id: contactId, label_id: labelId }, { onConflict: "contact_id,label_id" });
           if (linkError) {
             errors.push({
               row,
