@@ -23,6 +23,12 @@ type PreviewRow = {
   isValid: boolean;
 };
 
+function chunk<T>(arr: T[], size: number) {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 export default function ImportPage() {
   const router = useRouter();
   const [previewContacts, setPreviewContacts] = useState<NormalizedContact[]>([]);
@@ -120,46 +126,57 @@ export default function ImportPage() {
     setErrorMessage("");
     setImportResult(null);
     setImportResultText(null);
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     try {
       console.log("CONFIRM:start", { count: previewContacts?.length });
-      console.log("CONFIRM:before fetch");
       const supabase = getPlainSupabaseBrowser();
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) throw new Error("not_authenticated");
-      const controller = new AbortController();
-      timeoutId = setTimeout(() => controller.abort(), 55000);
-      const response = await fetch("/api/import/confirm", {
-        method: "POST",
-        body: JSON.stringify({ contacts: previewContacts }),
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        signal: controller.signal
-      });
-      const payload = await response.json().catch(() => null);
-      console.log("CONFIRM:after fetch", response.status, payload);
-      if (response.ok && payload?.finished === true) {
-        setImportResult(payload);
-        setImportResultText("Import abgeschlossen");
-        router.refresh();
-      } else {
-        const message =
-          payload?.error ?? "Import bestätigen fehlgeschlagen";
-        setErrorMessage(
-          `Import bestätigen fehlgeschlagen (Status ${response.status})`
-        );
-        setImportResultText(
-          `Import bestätigen fehlgeschlagen (Status ${response.status})\n${JSON.stringify(
-            payload,
-            null,
-            2
-          )}`
-        );
+      const batches = chunk(previewContacts, 200);
+      const totals = {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [] as { row?: number; phone?: string; message: string }[]
+      };
+      for (let i = 0; i < batches.length; i += 1) {
+        const batch = batches[i];
+        console.log(`CONFIRM:batch ${i + 1}/${batches.length}`, { count: batch.length });
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        try {
+          const controller = new AbortController();
+          timeoutId = setTimeout(() => controller.abort(), 55000);
+          const response = await fetch("/api/import/confirm", {
+            method: "POST",
+            body: JSON.stringify({ contacts: batch }),
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`
+            },
+            signal: controller.signal
+          });
+          const payload = await response.json().catch(() => null);
+          if (!response.ok || payload?.finished !== true) {
+            throw new Error(
+              `Import bestätigen fehlgeschlagen (Status ${response.status})`
+            );
+          }
+          totals.created += payload.created ?? 0;
+          totals.updated += payload.updated ?? 0;
+          totals.skipped += payload.skipped ?? 0;
+          totals.errors = totals.errors.concat(payload.errors ?? []);
+          setImportResult({ ...totals });
+          setImportResultText(`Batch ${i + 1}/${batches.length} abgeschlossen`);
+        } finally {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+        }
       }
+      setImportResult({ ...totals });
+      setImportResultText("Import abgeschlossen");
+      router.refresh();
     } catch (error) {
       console.error("Import confirm failed", error);
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -167,9 +184,6 @@ export default function ImportPage() {
         `Import bestätigen fehlgeschlagen\n${JSON.stringify(error, null, 2)}`
       );
     } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
       setIsImporting(false);
     }
   };
