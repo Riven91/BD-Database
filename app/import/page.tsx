@@ -135,12 +135,16 @@ export default function ImportPage() {
         }
       });
       const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(JSON.stringify(payload));
+      if (response.ok && payload.finished === true) {
+        setImportResult(payload);
+        setImportResultText("Import abgeschlossen");
+        router.refresh();
+      } else {
+        const message =
+          payload?.error ?? "Import bestätigen fehlgeschlagen";
+        setErrorMessage(message);
+        setImportResultText("Import fehlgeschlagen");
       }
-      setImportResult(payload);
-      setImportResultText("Import abgeschlossen");
-      router.refresh();
     } catch (error) {
       console.error("Import confirm failed", error);
       setErrorMessage(error instanceof Error ? error.message : String(error));
