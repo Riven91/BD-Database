@@ -50,10 +50,10 @@ type Contact = {
 };
 
 type ContactStats = {
-  totalCount: number;
-  missingNameCount: number;
-  missingPhoneCount: number;
-  locationCounts: { name: string; count: number }[];
+  total: number;
+  missingName: number;
+  missingPhone: number;
+  byLocation: { name: string; count: number }[];
 };
 
 const locationOptions = [
@@ -336,7 +336,7 @@ export default function DashboardPage() {
         ) : stats ? (
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-text-muted">
             <span>
-              Gesamt: <span className="text-text-primary">{stats.totalCount}</span>
+              Gesamt: <span className="text-text-primary">{stats.total}</span>
             </span>
             <span>
               Gefiltert: <span className="text-text-primary">{filteredContacts.length}</span>
@@ -344,16 +344,16 @@ export default function DashboardPage() {
             </span>
             <span>
               Fehlender Name: {" "}
-              <span className="text-text-primary">{stats.missingNameCount}</span>
+              <span className="text-text-primary">{stats.missingName}</span>
             </span>
             <span>
               Fehlende Nummer: {" "}
-              <span className="text-text-primary">{stats.missingPhoneCount}</span>
+              <span className="text-text-primary">{stats.missingPhone}</span>
             </span>
             <span className="flex flex-wrap gap-2">
               Standorte:
-              {stats.locationCounts.length ? (
-                stats.locationCounts.map((location) => (
+              {stats.byLocation.length ? (
+                stats.byLocation.map((location) => (
                   <span key={location.name} className="text-text-primary">
                     {location.name} ({location.count})
                   </span>
