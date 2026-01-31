@@ -19,9 +19,15 @@ export default function LabelsPage() {
 
   const loadLabels = async () => {
     const response = await fetchWithAuth("/api/labels?includeArchived=true");
-    if (!response.ok) return;
-    const payload = await response.json();
+    const text = await response.text();
+    if (!response.ok) {
+      console.error(`Labels load failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
+      return;
+    }
+    const payload = text ? JSON.parse(text) : {};
     setLabels(payload.labels ?? []);
+    setErrorMessage("");
   };
 
   useEffect(() => {
@@ -35,8 +41,8 @@ export default function LabelsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newLabel.trim() })
     });
+    const text = await response.text();
     if (!response.ok) {
-      const text = await response.text();
       console.error(`Label creation failed (HTTP ${response.status})`, text);
       setErrorMessage(`HTTP ${response.status}: ${text}`);
       return;
@@ -52,8 +58,8 @@ export default function LabelsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates)
     });
+    const text = await response.text();
     if (!response.ok) {
-      const text = await response.text();
       console.error(`Label update failed (HTTP ${response.status})`, text);
       setErrorMessage(`HTTP ${response.status}: ${text}`);
       return;

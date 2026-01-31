@@ -21,9 +21,15 @@ export default function TemplatesPage() {
 
   const loadTemplates = async () => {
     const response = await fetchWithAuth("/api/templates");
-    if (!response.ok) return;
-    const payload = await response.json();
+    const text = await response.text();
+    if (!response.ok) {
+      console.error(`Templates load failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
+      return;
+    }
+    const payload = text ? JSON.parse(text) : {};
     setTemplates(payload.templates ?? []);
+    setErrorMessage("");
   };
 
   useEffect(() => {
@@ -46,8 +52,8 @@ export default function TemplatesPage() {
         body: JSON.stringify({ title: title.trim(), body: body.trim() })
       });
     }
+    const text = await response.text();
     if (!response.ok) {
-      const text = await response.text();
       console.error(`Template save failed (HTTP ${response.status})`, text);
       setErrorMessage(`HTTP ${response.status}: ${text}`);
       return;
@@ -65,8 +71,8 @@ export default function TemplatesPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ is_archived: nextState })
     });
+    const text = await response.text();
     if (!response.ok) {
-      const text = await response.text();
       console.error(`Template update failed (HTTP ${response.status})`, text);
       setErrorMessage(`HTTP ${response.status}: ${text}`);
       return;
@@ -79,8 +85,8 @@ export default function TemplatesPage() {
     const response = await fetchWithAuth(`/api/templates/${templateId}`, {
       method: "DELETE"
     });
+    const text = await response.text();
     if (!response.ok) {
-      const text = await response.text();
       console.error(`Template delete failed (HTTP ${response.status})`, text);
       setErrorMessage(`HTTP ${response.status}: ${text}`);
       return;

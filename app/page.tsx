@@ -136,6 +136,7 @@ export default function DashboardPage() {
   const [labelSearch, setLabelSearch] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const loadData = async (locationValue: string) => {
@@ -146,13 +147,22 @@ export default function DashboardPage() {
       fetchWithAuth(`/api/contacts${locationParam}`),
       fetchWithAuth("/api/labels")
     ]);
+    const contactsText = await contactsResponse.text();
+    const labelsText = await labelsResponse.text();
     if (contactsResponse.ok) {
-      const payload = await contactsResponse.json();
+      const payload = contactsText ? JSON.parse(contactsText) : {};
       setContacts(payload.contacts ?? []);
+      setErrorMessage("");
+    } else {
+      console.error(`Contacts load failed (HTTP ${contactsResponse.status})`, contactsText);
+      setErrorMessage(`HTTP ${contactsResponse.status}: ${contactsText}`);
     }
     if (labelsResponse.ok) {
-      const payload = await labelsResponse.json();
+      const payload = labelsText ? JSON.parse(labelsText) : {};
       setLabels(payload.labels ?? []);
+    } else {
+      console.error(`Labels load failed (HTTP ${labelsResponse.status})`, labelsText);
+      setErrorMessage(`HTTP ${labelsResponse.status}: ${labelsText}`);
     }
     setIsLoading(false);
   };
@@ -198,8 +208,13 @@ export default function DashboardPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status })
     });
+    const text = await response.text();
     if (!response.ok) {
+      console.error(`Contact status update failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
       await loadData(locationFilter);
+    } else {
+      setErrorMessage("");
     }
     setSavingId(null);
   };
@@ -220,8 +235,13 @@ export default function DashboardPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ labelId: label.id })
     });
+    const text = await response.text();
     if (!response.ok) {
+      console.error(`Contact label assign failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
       await loadData(locationFilter);
+    } else {
+      setErrorMessage("");
     }
   };
 
@@ -239,8 +259,13 @@ export default function DashboardPage() {
       `/api/contacts/${contactId}/labels?labelId=${labelId}`,
       { method: "DELETE" }
     );
+    const text = await response.text();
     if (!response.ok) {
+      console.error(`Contact label remove failed (HTTP ${response.status})`, text);
+      setErrorMessage(`HTTP ${response.status}: ${text}`);
       await loadData(locationFilter);
+    } else {
+      setErrorMessage("");
     }
   };
 
@@ -300,6 +325,11 @@ export default function DashboardPage() {
           ))}
         </div>
       </section>
+      {errorMessage ? (
+        <div className="mb-6 rounded-md border border-red-500/60 bg-red-500/10 p-3 text-sm text-red-200">
+          {errorMessage}
+        </div>
+      ) : null}
 
       <section className="rounded-lg border border-base-800 bg-base-850">
         <div className="grid grid-cols-5 gap-4 border-b border-base-800 px-4 py-3 text-xs uppercase text-text-muted">

@@ -89,13 +89,13 @@ export default function ImportPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phones })
     });
+    const text = await response.text();
     if (!response.ok) {
-      const text = await response.text();
       console.error(`Import preview failed (HTTP ${response.status})`, text);
       setErrorMessage(`HTTP ${response.status}: ${text}`);
       return;
     }
-    const existing = await response.json();
+    const existing = text ? JSON.parse(text) : {};
     const existingSet = new Set(existing.existing ?? []);
 
     const newCount = phones.filter((phone) => !existingSet.has(phone)).length;
@@ -116,8 +116,11 @@ export default function ImportPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contacts: previewContacts })
     });
-    if (response.ok) {
-      const bodyText = await response.text();
+    const bodyText = await response.text();
+    if (!response.ok) {
+      console.error(`Import confirm failed (HTTP ${response.status})`, bodyText);
+      setErrorMessage(`HTTP ${response.status}: ${bodyText}`);
+    } else {
       try {
         const payload = JSON.parse(bodyText);
         if (
@@ -136,10 +139,6 @@ export default function ImportPage() {
         setImportResultText(bodyText);
       }
       router.refresh();
-    } else {
-      const text = await response.text();
-      console.error(`Import confirm failed (HTTP ${response.status})`, text);
-      setErrorMessage(`HTTP ${response.status}: ${text}`);
     }
     setIsImporting(false);
   };
