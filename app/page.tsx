@@ -49,6 +49,13 @@ type Contact = {
   labels: { id: string; name: string }[];
 };
 
+type ContactStats = {
+  total: number;
+  missingName: number;
+  missingPhone: number;
+  byLocation: { name: string; count: number }[];
+};
+
 const locationOptions = [
   { value: "all", label: "Alle" },
   { value: "heilbronn", label: "Heilbronn" },
@@ -147,6 +154,8 @@ export default function DashboardPage() {
   const [labelFilters, setLabelFilters] = useState<string[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
+  const [stats, setStats] = useState<ContactStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [contactsError, setContactsError] = useState<{
     message: string;
     code?: string | null;
@@ -193,6 +202,32 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData(locationFilter);
   }, [locationFilter]);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const response = await fetchWithAuth("/api/contacts/stats");
+        if (!response.ok) {
+          const payload = await response
+            .json()
+            .catch(() => ({ error: "Failed to load stats." }));
+          const message =
+            typeof payload?.error === "string"
+              ? payload.error
+              : payload?.error?.message ?? "Failed to load stats.";
+          setStatsError(message);
+          return;
+        }
+        const payload = await response.json();
+        setStats(payload ?? null);
+        setStatsError(null);
+      } catch (error) {
+        console.error("DASHBOARD_STATS_ERROR", error);
+        setStatsError("Failed to load stats.");
+      }
+    };
+    loadStats();
+  }, []);
 
   useEffect(() => {
     setLabelSearch("");
@@ -292,6 +327,46 @@ export default function DashboardPage() {
       <div className="mb-6">
         <AuthDebugPanel />
       </div>
+      <section className="mb-6 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
+        <div className="text-xs uppercase text-text-muted">Stats</div>
+        {statsError ? (
+          <div className="mt-2 text-xs text-amber-200">
+            Fehler beim Laden der Statistiken: {statsError}
+          </div>
+        ) : stats ? (
+          <div className="mt-2 flex flex-wrap gap-4 text-xs text-text-muted">
+            <span>
+              Gesamt: <span className="text-text-primary">{stats.total}</span>
+            </span>
+            <span>
+              Gefiltert: <span className="text-text-primary">{filteredContacts.length}</span>
+              <span className="text-text-muted"> / {contacts.length} geladen</span>
+            </span>
+            <span>
+              Fehlender Name: {" "}
+              <span className="text-text-primary">{stats.missingName}</span>
+            </span>
+            <span>
+              Fehlende Nummer: {" "}
+              <span className="text-text-primary">{stats.missingPhone}</span>
+            </span>
+            <span className="flex flex-wrap gap-2">
+              Standorte:
+              {stats.byLocation.length ? (
+                stats.byLocation.map((location) => (
+                  <span key={location.name} className="text-text-primary">
+                    {location.name} ({location.count})
+                  </span>
+                ))
+              ) : (
+                <span className="text-text-primary">—</span>
+              )}
+            </span>
+          </div>
+        ) : (
+          <div className="mt-2 text-xs text-text-muted">Lade Statistiken...</div>
+        )}
+      </section>
       <section className="mb-6 grid gap-4 rounded-lg border border-base-800 bg-base-850 p-4 md:grid-cols-4">
         <Input
           placeholder="Suche nach Name oder Telefon"
