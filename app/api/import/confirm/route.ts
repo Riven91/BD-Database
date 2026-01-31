@@ -44,12 +44,41 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }
+  const contentType = request.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    return NextResponse.json(
+      {
+        error: "bad_request",
+        message: "confirm expects application/json with { contacts: [...] }",
+        contentType
+      },
+      { status: 400 }
+    );
+  }
+  let body: { contacts?: NormalizedContact[] };
   try {
-    const body = await request.json();
-    const contacts: NormalizedContact[] = body.contacts ?? [];
-    if (!contacts.length) {
-      return NextResponse.json({ created: 0, updated: 0, skipped: 0, errors: [] });
-    }
+    body = await request.json();
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: "bad_request",
+        message: "invalid JSON body",
+        details: String(error)
+      },
+      { status: 400 }
+    );
+  }
+  const contacts: NormalizedContact[] = Array.isArray(body.contacts)
+    ? body.contacts
+    : [];
+  if (!contacts.length) {
+    return NextResponse.json(
+      { error: "bad_request", message: "contacts missing or empty" },
+      { status: 400 }
+    );
+  }
+
+  try {
 
     const locationMap = await getLocations(supabase);
     const labelMap = await getLabels(supabase);
@@ -177,6 +206,10 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Import fehlgeschlagen";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const stack = error instanceof Error ? error.stack : undefined;
+    return NextResponse.json(
+      { error: "server_error", message, stack },
+      { status: 500 }
+    );
   }
 }

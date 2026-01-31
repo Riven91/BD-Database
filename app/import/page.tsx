@@ -38,6 +38,26 @@ export default function ImportPage() {
   } | null>(null);
   const [importResultText, setImportResultText] = useState<string | null>(null);
 
+  const formatErrorMessage = async (response: Response) => {
+    const status = response.status;
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      try {
+        const payload = await response.json();
+        if (payload && typeof payload === "object") {
+          const error =
+            typeof payload.error === "string" ? payload.error : "unknown_error";
+          const message = typeof payload.message === "string" ? payload.message : "";
+          return `HTTP ${status}: ${error}${message ? ` - ${message}` : ""}`;
+        }
+      } catch (error) {
+        console.error("Failed to parse JSON error response", error);
+      }
+    }
+    const text = await response.text();
+    return `HTTP ${status}: ${text || "Request failed"}`;
+  };
+
   const handleFile = async (file: File) => {
     setPreviewStats(null);
     setPreviewContacts([]);
@@ -84,15 +104,17 @@ export default function ImportPage() {
     });
 
     const phones = contacts.map((contact) => contact.phone_e164);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("phones", JSON.stringify(phones));
     const response = await fetchWithAuth("/api/import/preview", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phones })
+      body: formData
     });
     if (!response.ok) {
-      const text = await response.text();
-      console.error(`Import preview failed (HTTP ${response.status})`, text);
-      setErrorMessage(`HTTP ${response.status}: ${text}`);
+      const message = await formatErrorMessage(response);
+      console.error(`Import preview failed (HTTP ${response.status})`, message);
+      setErrorMessage(message);
       return;
     }
     const existing = await response.json();
@@ -137,9 +159,9 @@ export default function ImportPage() {
       }
       router.refresh();
     } else {
-      const text = await response.text();
-      console.error(`Import confirm failed (HTTP ${response.status})`, text);
-      setErrorMessage(`HTTP ${response.status}: ${text}`);
+      const message = await formatErrorMessage(response);
+      console.error(`Import confirm failed (HTTP ${response.status})`, message);
+      setErrorMessage(message);
     }
     setIsImporting(false);
   };
