@@ -42,8 +42,8 @@ function buildUpdatePayload(contact: NormalizedContact) {
 }
 
 export async function POST(request: Request) {
-  const { supabase, user } = await getSupabaseAuthed(request);
   const requestId = crypto.randomUUID?.() ?? String(Date.now());
+  const { supabase, user } = await getSupabaseAuthed(request);
   if (!user) {
     return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }

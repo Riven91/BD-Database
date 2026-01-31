@@ -120,11 +120,16 @@ export default function ImportPage() {
     setErrorMessage("");
     setImportResult(null);
     setImportResultText(null);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     try {
+      console.log("CONFIRM:start", { count: previewContacts?.length });
+      console.log("CONFIRM:before fetch");
       const supabase = getPlainSupabaseBrowser();
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) throw new Error("not_authenticated");
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => controller.abort(), 55000);
       const response = await fetch("/api/import/confirm", {
         method: "POST",
         body: JSON.stringify({ contacts: previewContacts }),
@@ -132,24 +137,39 @@ export default function ImportPage() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
-        }
+        },
+        signal: controller.signal
       });
-      const payload = await response.json();
-      if (response.ok && payload.finished === true) {
+      const payload = await response.json().catch(() => null);
+      console.log("CONFIRM:after fetch", response.status, payload);
+      if (response.ok && payload?.finished === true) {
         setImportResult(payload);
         setImportResultText("Import abgeschlossen");
         router.refresh();
       } else {
         const message =
           payload?.error ?? "Import bestätigen fehlgeschlagen";
-        setErrorMessage(message);
-        setImportResultText("Import fehlgeschlagen");
+        setErrorMessage(
+          `Import bestätigen fehlgeschlagen (Status ${response.status})`
+        );
+        setImportResultText(
+          `Import bestätigen fehlgeschlagen (Status ${response.status})\n${JSON.stringify(
+            payload,
+            null,
+            2
+          )}`
+        );
       }
     } catch (error) {
       console.error("Import confirm failed", error);
       setErrorMessage(error instanceof Error ? error.message : String(error));
-      setImportResultText("Import fehlgeschlagen");
+      setImportResultText(
+        `Import bestätigen fehlgeschlagen\n${JSON.stringify(error, null, 2)}`
+      );
     } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       setIsImporting(false);
     }
   };
