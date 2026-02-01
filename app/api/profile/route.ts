@@ -4,31 +4,55 @@ import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+function errorPayload(where: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const maybeError = error as { code?: string | null; details?: string | null };
+  return {
+    error: "profile_failed",
+    where,
+    message,
+    code: maybeError?.code ?? null,
+    details: maybeError?.details ?? null,
+  };
+}
+
 export async function GET(request: Request) {
   try {
-    const { user } = await getSupabaseAuthed(request);
+    const { supabase, user } = await getSupabaseAuthed(request);
     if (!user) {
       return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
     }
 
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("location_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === "42P01") {
+        return NextResponse.json(
+          { profile: { location_id: null } },
+          { status: 200 },
+        );
+      }
+
+      return NextResponse.json(errorPayload("profiles.select", error), {
+        status: 500,
+      });
+    }
+
     return NextResponse.json(
       {
-        ok: true,
-        id: user.id,
-        email: user.email,
+        profile: { location_id: data?.location_id ?? null },
       },
       { status: 200 },
     );
   } catch (error) {
     console.error("PROFILE_FAILED", error);
-    return NextResponse.json(
-      {
-        error: "profile_failed",
-        where: "route.catch",
-        message: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    );
+    return NextResponse.json(errorPayload("route.catch", error), {
+      status: 500,
+    });
   }
 }
 
@@ -39,41 +63,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
     }
 
-    const { data: existing, error: existingError } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
-      .select("id, role, location_id")
+      .select("location_id")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (existingError) {
-      throw existingError;
-    }
-
-    if (existing) {
-      return NextResponse.json({ profile: existing });
-    }
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .insert({ id: user.id, role: "staff", location_id: null })
-      .select("id, role, location_id")
-      .single();
-
     if (error) {
-      throw error;
+      if (error.code === "42P01") {
+        return NextResponse.json(
+          { profile: { location_id: null } },
+          { status: 200 },
+        );
+      }
+
+      return NextResponse.json(errorPayload("profiles.select", error), {
+        status: 500,
+      });
     }
 
-    return NextResponse.json({ profile: data });
+    return NextResponse.json(
+      { profile: { location_id: data?.location_id ?? null } },
+      { status: 200 },
+    );
   } catch (error) {
     console.error("PROFILE_FAILED", error);
-    return NextResponse.json(
-      {
-        error: "profile_failed",
-        where: "route.catch",
-        message: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    );
+    return NextResponse.json(errorPayload("route.catch", error), {
+      status: 500,
+    });
   }
 }
 
@@ -107,13 +124,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ profile: data });
   } catch (error) {
     console.error("PROFILE_FAILED", error);
-    return NextResponse.json(
-      {
-        error: "profile_failed",
-        where: "route.catch",
-        message: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    );
+    return NextResponse.json(errorPayload("route.catch", error), {
+      status: 500,
+    });
   }
 }
