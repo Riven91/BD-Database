@@ -1,48 +1,43 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
+import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_FILE = /\.(.*)$/;
 
-function isPublicPath(pathname: string) {
-  return (
-    pathname === "/login" ||
-    pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/_next/") ||
+export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  // allow public files and Next internals
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/api") ||
     pathname === "/favicon.ico" ||
     pathname === "/robots.txt" ||
     pathname === "/sitemap.xml" ||
-    pathname.startsWith("/public/") ||
     PUBLIC_FILE.test(pathname)
-  );
-}
-
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  if (isPublicPath(pathname)) {
+  ) {
     return NextResponse.next();
   }
 
-  const response = NextResponse.next();
-  const supabase = createMiddlewareClient({ req: request, res: response });
-  const {
-    data: { session }
-  } = await supabase.auth.getSession();
+  // allow login routes
+  if (pathname.startsWith("/login")) return NextResponse.next();
 
-  if (!session) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set(
-      "next",
-      `${request.nextUrl.pathname}${request.nextUrl.search}`
-    );
-    return NextResponse.redirect(redirectUrl);
+  // ---- AUTH CHECK (cookie presence gate) ----
+  // Minimal and robust: if no supabase auth cookie, redirect to /login.
+  // Accept multiple possible cookie names.
+  const hasAuthCookie =
+    req.cookies.get("sb-access-token")?.value ||
+    req.cookies.get("sb-refresh-token")?.value ||
+    Array.from(req.cookies.getAll()).some((c) => c.name.startsWith("sb-") && c.value);
+
+  if (!hasAuthCookie) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
   }
 
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/:path*"]
+  matcher: ["/((?!_next|api).*)"],
 };
