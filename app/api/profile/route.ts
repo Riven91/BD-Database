@@ -26,17 +26,14 @@ export async function GET() {
       return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
     }
 
-    const { data: profile, error: profileErrorResponse } = await supabase
-      .from("profiles")
-      .select("id, role, location_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profileErrorResponse) {
-      return profileError("route.get.profile", profileErrorResponse.message);
-    }
-
-    return NextResponse.json({ profile });
+    return NextResponse.json(
+      {
+        ok: true,
+        id: user.id,
+        email: user.email,
+      },
+      { status: 200 },
+    );
   } catch (error) {
     console.error("PROFILE_FAILED", error);
     return profileError(
