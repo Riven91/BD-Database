@@ -5,6 +5,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+type LocationCountRow = {
+  location_id: string | null;
+  location_name: string | null;
+  count: number | string | null;
+};
+
 export async function GET(request: Request) {
   const { supabase, user } = await getSupabaseAuthed(request);
   if (!user) {
@@ -43,7 +49,7 @@ export async function GET(request: Request) {
     .select("id", { count: "exact", head: true })
     .is("phone_e164", null);
 
-  const { data: byLocationCounts, error: rpcError } = await supabase.rpc(
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
     "contacts_counts_by_location"
   );
 
@@ -59,11 +65,12 @@ export async function GET(request: Request) {
     );
   }
 
+  const byLocationCounts = (rpcData as LocationCountRow[] | null) ?? [];
   const byLocation =
-    (byLocationCounts ?? []).map((row) => ({
+    byLocationCounts.map((row: LocationCountRow) => ({
       name: row.location_name ?? "Unbekannt",
-      count: row.count ?? 0
-    })) ?? [];
+      count: typeof row.count === "string" ? Number(row.count) : (row.count ?? 0)
+    }));
 
   return NextResponse.json({
     ok: true,
