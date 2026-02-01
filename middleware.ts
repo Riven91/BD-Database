@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createMiddlewareClient } from "@supabase/ssr";
 
 const PRODUCTION_HOST = "management.blooddiamond-tattoo.de";
 
@@ -26,22 +25,18 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const response = NextResponse.next();
-  const supabase = createMiddlewareClient({ req, res: response });
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const isAuthenticated = req.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith("sb-") && cookie.value);
 
-  if (!user) {
+  if (!isAuthenticated) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(redirectUrl, {
-      headers: response.headers,
-    });
+    return NextResponse.redirect(redirectUrl);
   }
 
-  return response;
+  return NextResponse.next();
 }
 
 export const config = { matcher: ["/((?!_next|api).*)"] };
