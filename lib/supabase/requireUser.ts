@@ -19,36 +19,48 @@ function createAnonClient(token?: string) {
   return createClient(url, anonKey, {
     auth: {
       persistSession: false,
-      autoRefreshToken: false
+      autoRefreshToken: false,
     },
-    global: token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+    global: token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
   });
 }
 
 function getBearerToken(request: Request) {
-  const authHeader = request.headers.get("Authorization") ?? "";
+  const authHeader = request.headers.get("authorization") ?? request.headers.get("Authorization") ?? "";
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  return match?.[1] ?? null;
+  const token = match?.[1]?.trim() ?? null;
+  return token || null;
+}
+
+// ONLY accept real JWTs as Bearer session tokens
+function looksLikeJwt(token: string) {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  // quick sanity: JWT parts are long-ish
+  return parts[0].length > 10 && parts[1].length > 10 && parts[2].length > 10;
 }
 
 export async function requireUser(request: Request) {
   const token = getBearerToken(request);
-  if (token) {
+
+  // 1) Prefer Bearer only if it's a real JWT access token
+  if (token && looksLikeJwt(token)) {
     const supabase = createAnonClient();
     const { data, error } = await supabase.auth.getUser(token);
     return {
       user: data?.user ?? null,
-      mode: "bearer" as AuthMode,
-      error
+      mode: (data?.user ? "bearer" : "none") as AuthMode,
+      error,
     };
   }
 
+  // 2) Fallback: Cookie-based user (useful for UI gating, not the main truth)
   const supabase = createRouteHandlerClient({ cookies });
   const { data, error } = await supabase.auth.getUser();
   return {
     user: data?.user ?? null,
-    mode: data?.user ? ("cookie" as AuthMode) : ("none" as AuthMode),
-    error
+    mode: (data?.user ? "cookie" : "none") as AuthMode,
+    error,
   };
 }
 
@@ -58,16 +70,17 @@ export async function getSupabaseAuthed(request: Request): Promise<{
   mode: AuthMode;
 }> {
   const token = getBearerToken(request);
-  if (token) {
+
+  // 1) Prefer Bearer only if JWT
+  if (token && looksLikeJwt(token)) {
     const supabase = createAnonClient(token);
     const { data } = await supabase.auth.getUser(token);
-    return { supabase, user: data?.user ?? null, mode: "bearer" };
+    return { supabase, user: data?.user ?? null, mode: data?.user ? "bearer" : "none" };
   }
 
+  // 2) Cookie fallback
   const supabase = createRouteHandlerClient({ cookies });
   const { data } = await supabase.auth.getUser();
-  if (!data?.user) {
-    return { supabase, user: null, mode: "none" };
-  }
+  if (!data?.user) return { supabase, user: null, mode: "none" };
   return { supabase, user: data.user, mode: "cookie" };
 }
