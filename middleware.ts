@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 
-const PRODUCTION_HOST = "management.blooddiamond-tattoo.de";
 const PUBLIC_FILE = /\.(.*)$/;
 
-function isBypassPath(pathname: string) {
-  // Login pages are always public
+function isPublicPath(pathname: string) {
   if (pathname === "/login" || pathname.startsWith("/login/")) return true;
 
-  // Never gate APIs or Next internals
+  // never gate APIs or Next internals
   if (pathname.startsWith("/api")) return true;
   if (pathname.startsWith("/_next")) return true;
 
-  // Common public files
+  // public files
   if (pathname === "/favicon.ico") return true;
   if (pathname === "/robots.txt") return true;
   if (pathname === "/sitemap.xml") return true;
@@ -20,32 +19,41 @@ function isBypassPath(pathname: string) {
   return false;
 }
 
-function isProdHost(req: NextRequest) {
-  const hostname = (req.nextUrl.hostname || "").toLowerCase();
-  return hostname === PRODUCTION_HOST;
-}
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next();
 
-export function middleware(req: NextRequest) {
-  try {
-    const { pathname } = req.nextUrl;
+  // IMPORTANT: this is what creates/refreshes the Supabase auth cookies
+  const supabase = createMiddlewareClient({ req, res });
 
-    // Always allow the request to continue.
-    // Keep debug headers so you can verify middleware is running.
-    const res = NextResponse.next();
+  // refresh session if it exists (and set cookies on response)
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const { pathname } = req.nextUrl;
+
+  // Allow public paths always
+  if (isPublicPath(pathname)) {
     res.headers.set("x-mw", "1");
-    res.headers.set("x-mw-path", pathname);
-
-    if (isProdHost(req)) res.headers.set("x-mw-prod", "1");
-    if (isBypassPath(pathname)) res.headers.set("x-mw-bypass", "1");
-
-    // IMPORTANT:
-    // No auth gating here. No redirects. No cookie heuristics.
-    // This prevents lockouts when auth is stored in localStorage.
+    res.headers.set("x-mw-public", "1");
     return res;
-  } catch (e) {
-    console.error("MIDDLEWARE_FAIL", e);
-    return NextResponse.next();
   }
+
+  // Everything else requires login
+  if (!session) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", pathname);
+    const redirectRes = NextResponse.redirect(url);
+
+    redirectRes.headers.set("x-mw", "1");
+    redirectRes.headers.set("x-mw-redirect", "1");
+    return redirectRes;
+  }
+
+  res.headers.set("x-mw", "1");
+  res.headers.set("x-mw-auth", "1");
+  return res;
 }
 
 export const config = {
