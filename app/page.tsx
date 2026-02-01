@@ -156,6 +156,9 @@ export default function DashboardPage() {
   const [labels, setLabels] = useState<Label[]>([]);
   const [stats, setStats] = useState<ContactStats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
+  const pageSize = 100;
+  const [totalCount, setTotalCount] = useState(0);
   const [contactsError, setContactsError] = useState<{
     message: string;
     code?: string | null;
@@ -166,18 +169,20 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const loadData = async (locationValue: string) => {
+  const loadData = async (locationValue: string, currentPageIndex: number) => {
     setIsLoading(true);
     const locationParam =
       locationValue !== "all" ? `?location=${encodeURIComponent(locationValue)}` : "";
+    const paginationParam = `${locationParam ? "&" : "?"}page=${currentPageIndex}&pageSize=${pageSize}`;
     try {
       const [contactsResponse, labelsResponse] = await Promise.all([
-        fetchWithAuth(`/api/contacts${locationParam}`),
+        fetchWithAuth(`/api/contacts${locationParam}${paginationParam}`),
         fetchWithAuth("/api/labels")
       ]);
       if (contactsResponse.ok) {
         const payload = await contactsResponse.json();
         setContacts(payload.contacts ?? []);
+        setTotalCount(payload.count ?? 0);
         setContactsError(null);
       } else {
         const payload = await contactsResponse
@@ -200,8 +205,12 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    loadData(locationFilter);
-  }, [locationFilter]);
+    loadData(locationFilter, pageIndex);
+  }, [locationFilter, pageIndex]);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [query, statusFilter, locationFilter, labelFilters]);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -260,6 +269,11 @@ export default function DashboardPage() {
     });
   }, [contacts, labelFilters, locationFilter, query, statusFilter]);
 
+  const pageFrom = pageIndex * pageSize;
+  const pageTo = pageFrom + pageSize - 1;
+  const displayFrom = totalCount === 0 ? 0 : pageFrom + 1;
+  const displayTo = totalCount === 0 ? 0 : Math.min(pageTo + 1, totalCount);
+
   const handleStatusChange = async (contactId: string, status: string) => {
     setSavingId(contactId);
     setContacts((prev) =>
@@ -273,7 +287,7 @@ export default function DashboardPage() {
       body: JSON.stringify({ status })
     });
     if (!response.ok) {
-      await loadData(locationFilter);
+      await loadData(locationFilter, pageIndex);
     }
     setSavingId(null);
   };
@@ -295,7 +309,7 @@ export default function DashboardPage() {
       body: JSON.stringify({ labelId: label.id })
     });
     if (!response.ok) {
-      await loadData(locationFilter);
+      await loadData(locationFilter, pageIndex);
     }
   };
 
@@ -314,7 +328,7 @@ export default function DashboardPage() {
       { method: "DELETE" }
     );
     if (!response.ok) {
-      await loadData(locationFilter);
+      await loadData(locationFilter, pageIndex);
     }
   };
 
@@ -421,6 +435,29 @@ export default function DashboardPage() {
           {contactsError.code ? ` (${contactsError.code})` : null}
         </div>
       ) : null}
+
+      <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
+        <div className="text-text-muted">
+          Seite {pageIndex + 1} | Kontakte: {totalCount} | angezeigt: {displayFrom}–
+          {displayTo}
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setPageIndex((prev) => Math.max(0, prev - 1))}
+            disabled={pageIndex === 0}
+          >
+            Prev
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setPageIndex((prev) => prev + 1)}
+            disabled={(pageIndex + 1) * pageSize >= totalCount}
+          >
+            Next
+          </Button>
+        </div>
+      </section>
 
       <section className="rounded-lg border border-base-800 bg-base-850">
         <div className="grid grid-cols-5 gap-4 border-b border-base-800 px-4 py-3 text-xs uppercase text-text-muted">
