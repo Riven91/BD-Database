@@ -44,25 +44,29 @@ export async function GET(request: Request) {
     );
   }
 
-  // Missing name count aligned with dashboard display logic.
-  // Missing means all candidate fields are empty or null.
-  const missingNameRes = await supabase
+  const sampleLimit = 5000;
+  const sampleRes = await supabase
     .from("contacts")
-    .select("id", { count: "exact", head: true })
-    .or(
-      "and(or(name.is.null,name.eq.),or(display_name.is.null,display_name.eq.),or(full_name.is.null,full_name.eq.),or(first_name.is.null,first_name.eq.),or(last_name.is.null,last_name.eq.))"
-    );
+    .select("name, created_at")
+    .order("created_at", { ascending: false })
+    .limit(sampleLimit);
 
-  if (missingNameRes.error) {
+  if (sampleRes.error) {
     return NextResponse.json(
       {
         error: "stats_failed",
-        where: "contacts.missingName",
-        ...serializeSupaError(missingNameRes.error)
+        where: "contacts.sample",
+        ...serializeSupaError(sampleRes.error)
       },
       { status: 500 }
     );
   }
+
+  const rows = sampleRes.data ?? [];
+  const missingNameSample = rows.reduce((acc, row) => {
+    const name = (row.name ?? "").trim();
+    return acc + (name ? 0 : 1);
+  }, 0);
 
   // Missing phone count
   const missingPhoneRes = await supabase
@@ -105,7 +109,9 @@ export async function GET(request: Request) {
   return NextResponse.json({
     ok: true,
     total: totalRes.count ?? 0,
-    missingName: missingNameRes.count ?? 0,
+    missingNameSample,
+    sampleLimit,
+    missingNameIsSample: true,
     missingPhone: missingPhoneRes.count ?? 0,
     byLocation
   });
