@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     .from("contacts")
     .select("id", { count: "exact", head: true })
     .or(
-      "and(or(name.is.null,name.eq.),or(display_name.is.null,display_name.eq.),or(full_name.is.null,full_name.eq.),or(first_name.is.null,first_name.eq.),or(last_name.is.null,last_name.eq.))"
+      "and(or(name.is.null,name.match.^\\s*$),or(full_name.is.null,full_name.match.^\\s*$),or(first_name.is.null,first_name.match.^\\s*$),or(last_name.is.null,last_name.match.^\\s*$))"
     );
 
   if (missingNameRes.error) {
