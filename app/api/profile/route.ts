@@ -11,12 +11,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
     }
 
-    return NextResponse.json({
-      profile: {
+    return NextResponse.json(
+      {
         id: user.id,
         email: user.email ?? null,
       },
-    });
+      { status: 200 },
+    );
   } catch (error) {
     console.error("PROFILE_FAILED", error);
     return NextResponse.json(
