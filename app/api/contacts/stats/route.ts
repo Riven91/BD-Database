@@ -5,31 +5,21 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function safeString(v: unknown): string {
-  if (typeof v === "string") return v.trim();
-  if (v == null) return "";
-  return String(v).trim();
-}
+type LocationCountRow = {
+  location_id: string | null;
+  location_name: string | null;
+  count: number | string | null;
+};
 
-/**
- * Supabase relation fields can appear as:
- * - object: { name: "Heilbronn" }
- * - array:  [{ name: "Heilbronn" }]
- * - null/undefined
- */
-function extractLocationName(location: any): string {
-  if (!location) return "Unbekannt";
-
-  // Array relation
-  if (Array.isArray(location)) {
-    const first = location[0];
-    const name = safeString(first?.name);
-    return name || "Unbekannt";
-  }
-
-  // Object relation
-  const name = safeString(location?.name);
-  return name || "Unbekannt";
+function serializeSupaError(err: any) {
+  if (!err) return null;
+  return {
+    message: err.message ?? String(err),
+    details: err.details ?? null,
+    hint: err.hint ?? null,
+    code: err.code ?? null,
+    status: err.status ?? null
+  };
 }
 
 export async function GET(request: Request) {
@@ -48,8 +38,7 @@ export async function GET(request: Request) {
       {
         error: "stats_failed",
         where: "contacts.total",
-        message: totalResult.error.message,
-        code: (totalResult.error as any).code ?? null
+        ...serializeSupaError(totalResult.error)
       },
       { status: 500 }
     );
@@ -64,37 +53,62 @@ export async function GET(request: Request) {
       "and(or(name.is.null,name.eq.),or(display_name.is.null,display_name.eq.),or(full_name.is.null,full_name.eq.),or(first_name.is.null,first_name.eq.),or(last_name.is.null,last_name.eq.))"
     );
 
+  if (missingNameResult.error) {
+    return NextResponse.json(
+      {
+        error: "stats_failed",
+        where: "contacts.missingName",
+        ...serializeSupaError(missingNameResult.error)
+      },
+      { status: 500 }
+    );
+  }
+
   // Missing phone count
   const missingPhoneResult = await supabase
     .from("contacts")
     .select("id", { count: "exact", head: true })
     .is("phone_e164", null);
 
-  // Location breakdown (we fetch location relation + count client-side)
-  // This avoids group-by/RPC and is enough for a first stats bar.
-  const locationResult = await supabase
-    .from("contacts")
-    .select("location:locations(name)")
-    .limit(5000);
-
-  const locationCounts = new Map<string, number>();
-  for (const row of (locationResult.data as any[]) ?? []) {
-    const name = extractLocationName(row?.location);
-    locationCounts.set(name, (locationCounts.get(name) ?? 0) + 1);
+  if (missingPhoneResult.error) {
+    return NextResponse.json(
+      {
+        error: "stats_failed",
+        where: "contacts.missingPhone",
+        ...serializeSupaError(missingPhoneResult.error)
+      },
+      { status: 500 }
+    );
   }
 
-  // Convert map to sorted list (top 20)
-  const byLocation = Array.from(locationCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 20)
-    .map(([name, count]) => ({ name, count }));
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    "contacts_counts_by_location"
+  );
+
+  if (rpcError) {
+    return NextResponse.json(
+      {
+        error: "stats_failed",
+        where: "rpc.contacts_counts_by_location",
+        function: "contacts_counts_by_location",
+        ...serializeSupaError(rpcError)
+      },
+      { status: 500 }
+    );
+  }
+
+  const byLocationCounts = (rpcData as LocationCountRow[] | null) ?? [];
+  const byLocation =
+    byLocationCounts.map((row: LocationCountRow) => ({
+      name: row.location_name ?? "Unbekannt",
+      count: typeof row.count === "string" ? Number(row.count) : (row.count ?? 0)
+    }));
 
   return NextResponse.json({
     ok: true,
     total: totalResult.count ?? 0,
     missingName: missingNameResult.count ?? 0,
     missingPhone: missingPhoneResult.count ?? 0,
-    byLocation,
-    sampleLimit: 5000
+    byLocation
   });
 }
