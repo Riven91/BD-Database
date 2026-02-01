@@ -1,59 +1,94 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
-  const { supabase, user } = await getSupabaseAuthed(request);
-  if (!user) {
-    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+  try {
+    const { supabase, user } = await getSupabaseAuthed(request);
+
+    if (!user) {
+      return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+    }
+
+    const params = context.params;
+    if (!params?.id) {
+      return NextResponse.json({ error: "missing_contact_id" }, { status: 400 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const labelId = body?.labelId;
+
+    if (!labelId || typeof labelId !== "string") {
+      return NextResponse.json({ error: "missing_label_id" }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from("contact_labels")
+      .upsert({ contact_id: params.id, label_id: labelId }, { onConflict: "contact_id,label_id" });
+
+    if (error) {
+      console.error("contact_labels upsert failed:", error);
+      return NextResponse.json(
+        { error: "db_error", details: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    console.error("POST /api/contacts/[id]/labels failed:", e);
+    return NextResponse.json(
+      { error: "server_error", details: e?.message ?? "unknown" },
+      { status: 500 }
+    );
   }
-
-  const body = await request.json();
-  const labelId = body.labelId as string | undefined;
-  if (!labelId) {
-    return NextResponse.json({ error: "Missing labelId" }, { status: 400 });
-  }
-
-  const { error } = await supabase
-    .from("contact_labels")
-    .upsert({ contact_id: params.id, label_id: labelId });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
-  const { supabase, user } = await getSupabaseAuthed(request);
-  if (!user) {
-    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+  try {
+    const { supabase, user } = await getSupabaseAuthed(request);
+
+    if (!user) {
+      return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+    }
+
+    const params = context.params;
+    if (!params?.id) {
+      return NextResponse.json({ error: "missing_contact_id" }, { status: 400 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const labelId = body?.labelId;
+
+    if (!labelId || typeof labelId !== "string") {
+      return NextResponse.json({ error: "missing_label_id" }, { status: 400 });
+    }
+
+    const { error } = await supabase
+      .from("contact_labels")
+      .delete()
+      .eq("contact_id", params.id)
+      .eq("label_id", labelId);
+
+    if (error) {
+      console.error("contact_labels delete failed:", error);
+      return NextResponse.json(
+        { error: "db_error", details: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    console.error("DELETE /api/contacts/[id]/labels failed:", e);
+    return NextResponse.json(
+      { error: "server_error", details: e?.message ?? "unknown" },
+      { status: 500 }
+    );
   }
-
-  const url = new URL(request.url);
-  const labelId = url.searchParams.get("labelId");
-  if (!labelId) {
-    return NextResponse.json({ error: "Missing labelId" }, { status: 400 });
-  }
-
-  const { error } = await supabase
-    .from("contact_labels")
-    .delete()
-    .eq("contact_id", params.id)
-    .eq("label_id", labelId);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true });
 }
