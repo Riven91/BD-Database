@@ -22,6 +22,7 @@ import AuthDebugPanel from "@/components/AuthDebugPanel";
 import LogoutButton from "@/components/LogoutButton";
 import { Button, Chip, Input } from "@/components/ui";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { supabaseBrowser } from "@/lib/supabase/browserClient";
 
 const statusOptions = [
   { value: "neu", label: "Neu" },
@@ -44,8 +45,10 @@ type Contact = {
   first_name: string | null;
   last_name: string | null;
   phone_e164: string | null;
+  location_id: string | null;
+  created_at: string;
   status: string;
-  location: { name: string } | null;
+  location: { id: string; name: string } | null;
   labels: { id: string; name: string }[];
 };
 
@@ -56,22 +59,10 @@ type ContactStats = {
   byLocation: { name: string; count: number }[];
 };
 
-const locationOptions = [
-  { value: "all", label: "Alle" },
-  { value: "heilbronn", label: "Heilbronn" },
-  { value: "pforzheim", label: "Pforzheim" },
-  { value: "boeblingen", label: "Böblingen" }
-];
-
-function normalizeLocationName(value?: string | null) {
-  if (!value) return "";
-  return value
-    .trim()
-    .toLowerCase()
-    .replaceAll("ä", "ae")
-    .replaceAll("ö", "oe")
-    .replaceAll("ü", "ue");
-}
+type LocationOption = {
+  id: string;
+  name: string;
+};
 
 function sortLabels(labels: Label[]) {
   return [...labels].sort((a, b) => {
@@ -148,69 +139,102 @@ function SortableLabel({
 }
 
 export default function DashboardPage() {
-  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [locationFilter, setLocationFilter] = useState("all");
+  const [selectedLocationId, setSelectedLocationId] = useState("all");
   const [labelFilters, setLabelFilters] = useState<string[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [labels, setLabels] = useState<Label[]>([]);
-  const [stats, setStats] = useState<ContactStats | null>(null);
-  const [statsError, setStatsError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<"created_at" | "name">("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = 100;
+  const [loading, setLoading] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [labels, setLabels] = useState<Label[]>([]);
+  const [locations, setLocations] = useState<LocationOption[]>([]);
+  const [stats, setStats] = useState<ContactStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
-  const [contactsError, setContactsError] = useState<{
-    message: string;
-    code?: string | null;
-  } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [labelSearch, setLabelSearch] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const loadData = async (locationValue: string, currentPageIndex: number) => {
-    setIsLoading(true);
-    const locationParam =
-      locationValue !== "all" ? `?location=${encodeURIComponent(locationValue)}` : "";
-    const paginationParam = `${locationParam ? "&" : "?"}page=${currentPageIndex}&pageSize=${pageSize}`;
+  const loadContacts = async () => {
+    setLoading(true);
+    setErrorText(null);
+    const supabase = supabaseBrowser();
+    let query = supabase
+      .from("contacts")
+      .select(
+        "id, phone_e164, location_id, created_at, name, first_name, last_name, status, location:locations(id,name), labels:contact_labels(labels(id,name,sort_order,is_archived))",
+        { count: "exact" }
+      );
+
+    if (selectedLocationId && selectedLocationId !== "all") {
+      query = query.eq("location_id", selectedLocationId);
+    }
+
+    if (search.trim().length) {
+      const s = search.trim();
+      query = query.or(
+        `phone_e164.ilike.%${s}%,name.ilike.%${s}%,first_name.ilike.%${s}%,last_name.ilike.%${s}%`
+      );
+    }
+
+    if (statusFilter !== "all") {
+      query = query.eq("status", statusFilter);
+    }
+
+    query = query.order(sortKey, { ascending: sortDir === "asc" });
+
+    const from = pageIndex * pageSize;
+    const to = from + pageSize - 1;
+    query = query.range(from, to);
+
     try {
-      const [contactsResponse, labelsResponse] = await Promise.all([
-        fetchWithAuth(`/api/contacts${locationParam}${paginationParam}`),
-        fetchWithAuth("/api/labels")
-      ]);
-      if (contactsResponse.ok) {
-        const payload = await contactsResponse.json();
-        setContacts(payload.contacts ?? []);
-        setTotalCount(payload.count ?? 0);
-        setContactsError(null);
-      } else {
-        const payload = await contactsResponse
-          .json()
-          .catch(() => ({ error: { message: "Failed to load contacts." } }));
-        const error =
-          typeof payload?.error === "string"
-            ? { message: payload.error }
-            : payload?.error ?? { message: "Failed to load contacts." };
+      const { data, error, count } = await query;
+      if (error) {
         console.error("DASHBOARD_CONTACTS_ERROR", error);
-        setContactsError({ message: error.message, code: error.code ?? null });
+        setErrorText(`${error.message} (${error.code ?? ""})`);
+        return;
       }
-      if (labelsResponse.ok) {
-        const payload = await labelsResponse.json();
-        setLabels(payload.labels ?? []);
-      }
+      const mappedContacts = (data ?? []).map((contact: any) => ({
+        ...contact,
+        labels: (contact.labels ?? [])
+          .map((item: any) => item.labels)
+          .filter(Boolean)
+      }));
+      setContacts(mappedContacts);
+      setTotalCount(count ?? 0);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData(locationFilter, pageIndex);
-  }, [locationFilter, pageIndex]);
+    loadContacts();
+  }, [selectedLocationId, search, sortKey, sortDir, pageIndex, statusFilter]);
 
   useEffect(() => {
-    setPageIndex(0);
-  }, [query, statusFilter, locationFilter, labelFilters]);
+    const loadLabels = async () => {
+      const response = await fetchWithAuth("/api/labels");
+      if (!response.ok) return;
+      const payload = await response.json();
+      setLabels(payload.labels ?? []);
+    };
+    loadLabels();
+  }, []);
+
+  useEffect(() => {
+    const loadLocations = async () => {
+      const response = await fetchWithAuth("/api/locations");
+      if (!response.ok) return;
+      const payload = await response.json();
+      setLocations(payload.locations ?? []);
+    };
+    loadLocations();
+  }, []);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -243,31 +267,13 @@ export default function DashboardPage() {
   }, [expandedId]);
 
   const filteredContacts = useMemo(() => {
-    return contacts.filter((contact) => {
-      const combinedName = [contact.first_name, contact.last_name]
-        .filter(Boolean)
-        .join(" ")
-        .trim();
-      const nameValue =
-        contact.name ?? (combinedName.length > 0 ? combinedName : null);
-      const matchesQuery = query
-        ? [nameValue, contact.phone_e164]
-            .join(" ")
-            .toLowerCase()
-            .includes(query.toLowerCase())
-        : true;
-      const matchesStatus = statusFilter === "all" || contact.status === statusFilter;
-      const matchesLocation =
-        locationFilter === "all" ||
-        normalizeLocationName(contact.location?.name) === locationFilter;
-      const matchesLabels = labelFilters.length
-        ? labelFilters.every((labelId) =>
-            contact.labels.some((label) => label.id === labelId)
-          )
-        : true;
-      return matchesQuery && matchesStatus && matchesLocation && matchesLabels;
-    });
-  }, [contacts, labelFilters, locationFilter, query, statusFilter]);
+    if (!labelFilters.length) return contacts;
+    return contacts.filter((contact) =>
+      labelFilters.every((labelId) =>
+        contact.labels.some((label) => label.id === labelId)
+      )
+    );
+  }, [contacts, labelFilters]);
 
   const pageFrom = pageIndex * pageSize;
   const pageTo = pageFrom + pageSize - 1;
@@ -287,7 +293,7 @@ export default function DashboardPage() {
       body: JSON.stringify({ status })
     });
     if (!response.ok) {
-      await loadData(locationFilter, pageIndex);
+      await loadContacts();
     }
     setSavingId(null);
   };
@@ -309,7 +315,7 @@ export default function DashboardPage() {
       body: JSON.stringify({ labelId: label.id })
     });
     if (!response.ok) {
-      await loadData(locationFilter, pageIndex);
+      await loadContacts();
     }
   };
 
@@ -328,7 +334,7 @@ export default function DashboardPage() {
       { method: "DELETE" }
     );
     if (!response.ok) {
-      await loadData(locationFilter, pageIndex);
+      await loadContacts();
     }
   };
 
@@ -381,16 +387,23 @@ export default function DashboardPage() {
           <div className="mt-2 text-xs text-text-muted">Lade Statistiken...</div>
         )}
       </section>
-      <section className="mb-6 grid gap-4 rounded-lg border border-base-800 bg-base-850 p-4 md:grid-cols-4">
+      <section className="mb-6 grid gap-4 rounded-lg border border-base-800 bg-base-850 p-4 md:grid-cols-6">
         <Input
           placeholder="Suche nach Name oder Telefon"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setPageIndex(0);
+          }}
+          className="md:col-span-2"
         />
         <select
           className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value)}
+          onChange={(event) => {
+            setStatusFilter(event.target.value);
+            setPageIndex(0);
+          }}
         >
           <option value="all">Alle Status</option>
           {statusOptions.map((status) => (
@@ -401,27 +414,54 @@ export default function DashboardPage() {
         </select>
         <select
           className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
-          value={locationFilter}
-          onChange={(event) => setLocationFilter(event.target.value)}
+          value={selectedLocationId}
+          onChange={(event) => {
+            setSelectedLocationId(event.target.value);
+            setPageIndex(0);
+          }}
         >
-          {locationOptions.map((location) => (
-            <option key={location.value} value={location.value}>
-              {location.label}
+          <option value="all">Alle Standorte</option>
+          {locations.map((location) => (
+            <option key={location.id} value={location.id}>
+              {location.name}
             </option>
           ))}
         </select>
-        <div className="flex flex-wrap gap-2">
+        <select
+          className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
+          value={sortKey}
+          onChange={(event) => {
+            setSortKey(event.target.value as "created_at" | "name");
+            setPageIndex(0);
+          }}
+        >
+          <option value="created_at">Sortiert nach Datum</option>
+          <option value="name">Sortiert nach Name</option>
+        </select>
+        <select
+          className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
+          value={sortDir}
+          onChange={(event) => {
+            setSortDir(event.target.value as "asc" | "desc");
+            setPageIndex(0);
+          }}
+        >
+          <option value="desc">Absteigend</option>
+          <option value="asc">Aufsteigend</option>
+        </select>
+        <div className="flex flex-wrap gap-2 md:col-span-6">
           {sortLabels(labels.filter((label) => !label.is_archived)).map((label) => (
             <button
               key={label.id}
               type="button"
-              onClick={() =>
+              onClick={() => {
+                setPageIndex(0);
                 setLabelFilters((prev) =>
                   prev.includes(label.id)
                     ? prev.filter((item) => item !== label.id)
                     : [...prev, label.id]
-                )
-              }
+                );
+              }}
             >
               <Chip label={label.name} selected={labelFilters.includes(label.id)} />
             </button>
@@ -429,17 +469,15 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {contactsError ? (
+      {errorText ? (
         <div className="mb-4 rounded-lg border border-amber-500/60 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          Fehler beim Laden der Kontakte: {contactsError.message}
-          {contactsError.code ? ` (${contactsError.code})` : null}
+          Fehler beim Laden der Kontakte: {errorText}
         </div>
       ) : null}
 
       <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
         <div className="text-text-muted">
-          Seite {pageIndex + 1} | Kontakte: {totalCount} | angezeigt: {displayFrom}–
-          {displayTo}
+          Zeige {displayFrom}–{displayTo} von {totalCount}
         </div>
         <div className="flex gap-2">
           <Button
@@ -467,8 +505,12 @@ export default function DashboardPage() {
           <span>Status</span>
           <span>Labels</span>
         </div>
-        {isLoading ? (
-          <div className="px-4 py-6 text-sm text-text-muted">Lade Daten...</div>
+        {loading ? (
+          <div className="px-4 py-6 text-sm text-text-muted">Lade Kontakte …</div>
+        ) : filteredContacts.length === 0 ? (
+          <div className="px-4 py-6 text-sm text-text-muted">
+            Keine Kontakte für diesen Filter.
+          </div>
         ) : (
           filteredContacts.map((contact) => {
             const assignedLabelIds = contact.labels.map((label) => label.id);
