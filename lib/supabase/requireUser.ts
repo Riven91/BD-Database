@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export type AuthMode = "bearer" | "cookie" | "none";
 
@@ -14,7 +14,23 @@ function getEnv() {
   return { url, anonKey };
 }
 
-function createAnonClient(token?: string) {
+function getBearerToken(request: Request) {
+  const authHeader =
+    request.headers.get("authorization") ??
+    request.headers.get("Authorization") ??
+    "";
+
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = match?.[1]?.trim() ?? null;
+  return token || null;
+}
+
+function looksLikeJwt(token: string) {
+  const parts = token.split(".");
+  return parts.length === 3 && parts[0].length > 10 && parts[1].length > 10;
+}
+
+function createAnonClientWithBearer(token: string): SupabaseClient {
   const { url, anonKey } = getEnv();
 
   return createClient(url, anonKey, {
@@ -23,78 +39,53 @@ function createAnonClient(token?: string) {
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
-    global: token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
   });
 }
 
-function getBearerToken(request: Request) {
-  // be tolerant with header casing
-  const authHeader =
-    request.headers.get("authorization") ??
-    request.headers.get("Authorization") ??
-    "";
-
-  // THIS MUST BE "Bearer" without spaces
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-
-  const token = match?.[1]?.trim() ?? null;
-  return token || null;
+function createCookieClient(): SupabaseClient {
+  // IMPORTANT: cast to a single SupabaseClient type (avoid union overload issues)
+  return createRouteHandlerClient({ cookies }) as unknown as SupabaseClient;
 }
 
-// ONLY accept real JWTs as Bearer session tokens
-function looksLikeJwt(token: string) {
-  const parts = token.split(".");
-  if (parts.length !== 3) return false;
-  // quick sanity: JWT parts are long-ish
-  return parts[0].length > 10 && parts[1].length > 10 && parts[2].length > 10;
-}
-
-export async function requireUser(request: Request) {
+export async function requireUser(request: Request): Promise<{
+  user: any | null;
+  mode: AuthMode;
+  error: any | null;
+}> {
   const token = getBearerToken(request);
 
-  // 1) Prefer Bearer only if it's a real JWT access token
   if (token && looksLikeJwt(token)) {
-    const supabase = createAnonClient();
+    const supabase = createAnonClientWithBearer(token);
     const { data, error } = await supabase.auth.getUser(token);
-
-    return {
-      user: data?.user ?? null,
-      mode: (data?.user ? "bearer" : "none") as AuthMode,
-      error,
-    };
+    return { user: data?.user ?? null, mode: data?.user ? "bearer" : "none", error: error ?? null };
   }
 
-  // 2) Fallback: Cookie-based user (useful for UI gating, not the main truth)
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createCookieClient();
   const { data, error } = await supabase.auth.getUser();
-
-  return {
-    user: data?.user ?? null,
-    mode: (data?.user ? "cookie" : "none") as AuthMode,
-    error,
-  };
+  return { user: data?.user ?? null, mode: data?.user ? "cookie" : "none", error: error ?? null };
 }
 
 export async function getSupabaseAuthed(
   request: Request
 ): Promise<{
-  supabase: ReturnType<typeof createAnonClient> | ReturnType<typeof createRouteHandlerClient>;
+  supabase: SupabaseClient;
   user: any | null;
   mode: AuthMode;
 }> {
   const token = getBearerToken(request);
 
-  // 1) Prefer Bearer only if JWT
   if (token && looksLikeJwt(token)) {
-    const supabase = createAnonClient(token);
+    const supabase = createAnonClientWithBearer(token);
     const { data } = await supabase.auth.getUser(token);
     return { supabase, user: data?.user ?? null, mode: data?.user ? "bearer" : "none" };
   }
 
-  // 2) Cookie fallback
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createCookieClient();
   const { data } = await supabase.auth.getUser();
-  if (!data?.user) return { supabase, user: null, mode: "none" };
-
-  return { supabase, user: data.user, mode: "cookie" };
+  return { supabase, user: data?.user ?? null, mode: data?.user ? "cookie" : "none" };
 }
