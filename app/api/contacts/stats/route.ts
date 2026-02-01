@@ -46,19 +46,19 @@ export async function GET(request: Request) {
 
   // Missing name count aligned with dashboard display logic.
   // Missing means all candidate fields are empty or null.
-  const missingNameResult = await supabase
+  const missingNameRes = await supabase
     .from("contacts")
     .select("id", { count: "exact", head: true })
     .or(
       "and(or(name.is.null,name.eq.),or(display_name.is.null,display_name.eq.),or(full_name.is.null,full_name.eq.),or(first_name.is.null,first_name.eq.),or(last_name.is.null,last_name.eq.))"
     );
 
-  if (missingNameResult.error) {
+  if (missingNameRes.error) {
     return NextResponse.json(
       {
         error: "stats_failed",
         where: "contacts.missingName",
-        ...serializeSupaError(missingNameResult.error)
+        ...serializeSupaError(missingNameRes.error)
       },
       { status: 500 }
     );
@@ -70,34 +70,32 @@ export async function GET(request: Request) {
     .select("id", { count: "exact", head: true })
     .is("phone_e164", null);
 
-  if (missingPhoneResult.error) {
+  if (missingPhoneRes.error) {
     return NextResponse.json(
       {
         error: "stats_failed",
         where: "contacts.missingPhone",
-        ...serializeSupaError(missingPhoneResult.error)
+        ...serializeSupaError(missingPhoneRes.error)
       },
       { status: 500 }
     );
   }
 
-  const { data: rpcData, error: rpcError } = await supabase.rpc(
-    "contacts_counts_by_location"
-  );
+  const rpcRes = await supabase.rpc("contacts_counts_by_location");
 
-  if (rpcError) {
+  if (rpcRes.error) {
     return NextResponse.json(
       {
         error: "stats_failed",
         where: "rpc.contacts_counts_by_location",
         function: "contacts_counts_by_location",
-        ...serializeSupaError(rpcError)
+        ...serializeSupaError(rpcRes.error)
       },
       { status: 500 }
     );
   }
 
-  const byLocationCounts = (rpcData as LocationCountRow[] | null) ?? [];
+  const byLocationCounts = (rpcRes.data as LocationCountRow[] | null) ?? [];
   const byLocation =
     byLocationCounts.map((row: LocationCountRow) => ({
       name: row.location_name ?? "Unbekannt",
@@ -107,8 +105,8 @@ export async function GET(request: Request) {
   return NextResponse.json({
     ok: true,
     total: totalRes.count ?? 0,
-    missingName: missingNameResult.count ?? 0,
-    missingPhone: missingPhoneResult.count ?? 0,
+    missingName: missingNameRes.count ?? 0,
+    missingPhone: missingPhoneRes.count ?? 0,
     byLocation
   });
 }
