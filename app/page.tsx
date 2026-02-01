@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   closestCenter,
   DndContext,
@@ -167,12 +167,15 @@ export default function DashboardPage() {
   const [labelSearch, setLabelSearch] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const previousLocationRef = useRef(locationFilter);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const loadData = async (locationValue: string, currentPageIndex: number) => {
     setIsLoading(true);
     const locationParam =
-      locationValue !== "all" ? `?location=${encodeURIComponent(locationValue)}` : "";
+      !locationValue || locationValue === "all"
+        ? ""
+        : `?location=${encodeURIComponent(locationValue)}`;
     const paginationParam = `${locationParam ? "&" : "?"}page=${currentPageIndex}&pageSize=${pageSize}`;
     try {
       const [contactsResponse, labelsResponse] = await Promise.all([
@@ -205,12 +208,23 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    const locationChanged = locationFilter !== previousLocationRef.current;
+    if (locationChanged) {
+      console.log("FILTER_CHANGE", { selectedLocation: locationFilter, pageIndex });
+      setContacts([]);
+      setIsLoading(true);
+      if (pageIndex !== 0) {
+        setPageIndex(0);
+        return;
+      }
+    }
+    previousLocationRef.current = locationFilter;
     loadData(locationFilter, pageIndex);
   }, [locationFilter, pageIndex]);
 
   useEffect(() => {
     setPageIndex(0);
-  }, [query, statusFilter, locationFilter, labelFilters]);
+  }, [query, statusFilter, labelFilters]);
 
   useEffect(() => {
     const loadStats = async () => {
