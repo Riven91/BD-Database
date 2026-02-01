@@ -47,7 +47,7 @@ export async function GET(request: Request) {
   const sampleLimit = 5000;
   const sampleRes = await supabase
     .from("contacts")
-    .select("name, full_name, first_name, last_name, created_at")
+    .select("name, created_at")
     .order("created_at", { ascending: false })
     .limit(sampleLimit);
 
@@ -65,10 +65,7 @@ export async function GET(request: Request) {
   const rows = sampleRes.data ?? [];
   const missingNameSample = rows.reduce((acc, row) => {
     const name = (row.name ?? "").trim();
-    const fullName = (row.full_name ?? "").trim();
-    const firstName = (row.first_name ?? "").trim();
-    const lastName = (row.last_name ?? "").trim();
-    return acc + (name || fullName || firstName || lastName ? 0 : 1);
+    return acc + (name ? 0 : 1);
   }, 0);
 
   // Missing phone count
