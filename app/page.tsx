@@ -240,18 +240,17 @@ export default function DashboardPage() {
     const loadStats = async () => {
       try {
         const response = await fetchWithAuth("/api/contacts/stats");
+        const text = await response.text();
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(text);
+        } catch {}
         if (!response.ok) {
-          const payload = await response
-            .json()
-            .catch(() => ({ error: "Failed to load stats." }));
-          const message =
-            typeof payload?.error === "string"
-              ? payload.error
-              : payload?.error?.message ?? "Failed to load stats.";
-          setStatsError(message);
+          console.error("STATS_FETCH_ERROR_RAW", { status: response.status, text });
+          setStatsError(JSON.stringify(parsed ?? { raw: text }, null, 2));
           return;
         }
-        const payload = await response.json();
+        const payload = parsed ?? null;
         setStats(payload ?? null);
         setStatsError(null);
       } catch (error) {
@@ -350,8 +349,13 @@ export default function DashboardPage() {
       <section className="mb-6 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
         <div className="text-xs uppercase text-text-muted">Stats</div>
         {statsError ? (
-          <div className="mt-2 text-xs text-amber-200">
-            Fehler beim Laden der Statistiken: {statsError}
+          <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+            <div className="font-medium text-amber-200">
+              Fehler beim Laden der Statistiken
+            </div>
+            <pre className="mt-2 whitespace-pre-wrap text-xs text-amber-100">
+              {statsError}
+            </pre>
           </div>
         ) : stats ? (
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-text-muted">
