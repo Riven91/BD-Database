@@ -11,6 +11,17 @@ type LocationCountRow = {
   count: number | string | null;
 };
 
+function serializeSupaError(err: any) {
+  if (!err) return null;
+  return {
+    message: err.message ?? String(err),
+    details: err.details ?? null,
+    hint: err.hint ?? null,
+    code: err.code ?? null,
+    status: err.status ?? null
+  };
+}
+
 export async function GET(request: Request) {
   const { supabase, user } = await getSupabaseAuthed(request);
   if (!user) {
@@ -27,8 +38,7 @@ export async function GET(request: Request) {
       {
         error: "stats_failed",
         where: "contacts.total",
-        message: totalResult.error.message,
-        code: (totalResult.error as any).code ?? null
+        ...serializeSupaError(totalResult.error)
       },
       { status: 500 }
     );
@@ -43,11 +53,33 @@ export async function GET(request: Request) {
       "and(or(name.is.null,name.eq.),or(display_name.is.null,display_name.eq.),or(full_name.is.null,full_name.eq.),or(first_name.is.null,first_name.eq.),or(last_name.is.null,last_name.eq.))"
     );
 
+  if (missingNameResult.error) {
+    return NextResponse.json(
+      {
+        error: "stats_failed",
+        where: "contacts.missingName",
+        ...serializeSupaError(missingNameResult.error)
+      },
+      { status: 500 }
+    );
+  }
+
   // Missing phone count
   const missingPhoneResult = await supabase
     .from("contacts")
     .select("id", { count: "exact", head: true })
     .is("phone_e164", null);
+
+  if (missingPhoneResult.error) {
+    return NextResponse.json(
+      {
+        error: "stats_failed",
+        where: "contacts.missingPhone",
+        ...serializeSupaError(missingPhoneResult.error)
+      },
+      { status: 500 }
+    );
+  }
 
   const { data: rpcData, error: rpcError } = await supabase.rpc(
     "contacts_counts_by_location"
@@ -57,9 +89,9 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         error: "stats_failed",
-        where: "contacts.by_location",
-        message: rpcError.message,
-        code: (rpcError as any).code ?? null
+        where: "rpc.contacts_counts_by_location",
+        function: "contacts_counts_by_location",
+        ...serializeSupaError(rpcError)
       },
       { status: 500 }
     );
