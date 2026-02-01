@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       {
         error: "stats_failed",
         where: "contacts.total",
-        ...serializeSupaError(totalResult.error)
+        ...serializeSupaError(totalRes.error)
       },
       { status: 500 }
     );
@@ -106,7 +106,7 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    total: totalResult.count ?? 0,
+    total: totalRes.count ?? 0,
     missingName: missingNameResult.count ?? 0,
     missingPhone: missingPhoneResult.count ?? 0,
     byLocation
