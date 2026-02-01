@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button, Input } from "@/components/ui";
@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Read ?next=... from the URL without useSearchParams (avoids Suspense/SSG issues)
+  // Read ?next=... without useSearchParams (avoids Next build/Suspense issues)
   const nextPath = useMemo(() => {
     if (typeof window === "undefined") return "/";
     const sp = new URLSearchParams(window.location.search);
@@ -38,26 +38,9 @@ export default function LoginPage() {
         return;
       }
 
-      // Ensure server state updates
-      router.refresh();
-
-      // Call profile without custom token plumbing
-      const profileResponse = await fetch("/api/profile", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (profileResponse.ok) {
-        const payload = await profileResponse.json();
-        if (!payload?.profile?.location_id) {
-          router.replace("/onboarding");
-          router.refresh();
-          return;
-        }
-      }
-
-      router.replace(nextPath);
+      // IMPORTANT: no onboarding, no profile calls.
+      // Just go to nextPath or home.
+      router.replace(nextPath || "/");
       router.refresh();
     } catch (e: any) {
       setError(e?.message || "Login fehlgeschlagen");
@@ -95,12 +78,7 @@ export default function LoginPage() {
 
         {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
-        <Button
-          type="submit"
-          variant="primary"
-          className="w-full"
-          disabled={loading}
-        >
+        <Button type="submit" variant="primary" className="w-full" disabled={loading}>
           {loading ? "Anmelden..." : "Login"}
         </Button>
       </form>
