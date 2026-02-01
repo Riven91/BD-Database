@@ -4,21 +4,7 @@ import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type ErrorContext = {
-  requestId: string;
-  tokenPrefix: string;
-  status?: number;
-  bodySnippet?: string;
-};
-
-function createRequestId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return String(Date.now());
-}
-
-function errorPayload(where: string, error: unknown, context: ErrorContext) {
+function errorPayload(where: string, error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   const maybeError = error as { code?: string | null; details?: string | null };
   return {
@@ -27,52 +13,46 @@ function errorPayload(where: string, error: unknown, context: ErrorContext) {
     message,
     code: maybeError?.code ?? null,
     details: maybeError?.details ?? null,
-    ...context,
   };
 }
 
-async function handle(request: Request) {
-  const auth =
-    request.headers.get("authorization") ??
-    request.headers.get("Authorization");
-  const requestId = createRequestId();
+export async function GET(request: Request) {
+  try {
+    const { supabase, user } = await getSupabaseAuthed(request);
+    if (!user) {
+      return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+    }
 
-  if (!auth?.startsWith("Bearer ")) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("location_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === "42P01") {
+        return NextResponse.json(
+          { profile: { location_id: null } },
+          { status: 200 },
+        );
+      }
+
+      return NextResponse.json(errorPayload("profiles.select", error), {
+        status: 500,
+      });
+    }
+
     return NextResponse.json(
       {
-        error: "not_authenticated",
-        where: "missing_bearer",
-        requestId,
-        tokenPrefix: "",
+        profile: { location_id: data?.location_id ?? null },
       },
       { status: 401 },
     );
-  }
-
-  const token = auth.slice(7).trim();
-  const tokenPrefix = token.slice(0, 8);
-  if (token.length < 20) {
-    return NextResponse.json(
-      {
-        error: "not_authenticated",
-        where: "bad_token_length",
-        requestId,
-        tokenPrefix,
-      },
-      { status: 401 },
-    );
-  }
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anon) {
-    return NextResponse.json(
-      errorPayload("env", "Missing Supabase env", {
-        requestId,
-        tokenPrefix,
-      }),
-      { status: 500 },
-    );
+  } catch (error) {
+    console.error("PROFILE_FAILED", error);
+    return NextResponse.json(errorPayload("route.catch", error), {
+      status: 500,
+    });
   }
 
   const authResponse = await fetch(`${url}/auth/v1/user`, {
@@ -83,94 +63,34 @@ async function handle(request: Request) {
     },
   });
 
-  if (authResponse.status === 401 || authResponse.status === 403) {
-    return NextResponse.json(
-      {
-        error: "not_authenticated",
-        where: "auth_user",
-        status: authResponse.status,
-        requestId,
-        tokenPrefix,
-      },
-      { status: 401 },
-    );
-  }
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("location_id")
+      .eq("id", user.id)
+      .maybeSingle();
 
-  if (!authResponse.ok) {
-    const bodySnippet = (await authResponse.text()).slice(0, 200);
-    return NextResponse.json(
-      errorPayload("auth_user", "Supabase auth failed", {
-        status: authResponse.status,
-        bodySnippet,
-        requestId,
-        tokenPrefix,
-      }),
-      { status: 500 },
-    );
-  }
+    if (error) {
+      if (error.code === "42P01") {
+        return NextResponse.json(
+          { profile: { location_id: null } },
+          { status: 200 },
+        );
+      }
 
-  const authData = (await authResponse.json()) as { id?: string };
-  const userId = authData?.id;
-  if (!userId) {
-    return NextResponse.json(
-      {
-        error: "not_authenticated",
-        where: "auth_user",
-        status: authResponse.status,
-        requestId,
-        tokenPrefix,
-      },
-      { status: 401 },
-    );
-  }
+      return NextResponse.json(errorPayload("profiles.select", error), {
+        status: 500,
+      });
+    }
 
-  const profileResponse = await fetch(
-    `${url}/rest/v1/profiles?select=location_id&id=eq.${userId}&limit=1`,
-    {
-      method: "GET",
-      headers: {
-        apikey: anon,
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-    },
-  );
-
-  if (profileResponse.status === 404) {
     return NextResponse.json(
-      { profile: { location_id: null } },
+      { profile: { location_id: data?.location_id ?? null } },
       { status: 200 },
     );
-  }
-
-  const profileBodyText = await profileResponse.text();
-  if (
-    profileBodyText.includes("relation") &&
-    profileBodyText.includes("does not exist")
-  ) {
-    return NextResponse.json(
-      { profile: { location_id: null } },
-      { status: 200 },
-    );
-  }
-
-  if (profileResponse.status === 401 || profileResponse.status === 403) {
-    return NextResponse.json(
-      { profile: { location_id: null }, rls: "blocked" },
-      { status: 200 },
-    );
-  }
-
-  if (!profileResponse.ok) {
-    return NextResponse.json(
-      errorPayload("profiles_select", "Supabase profiles query failed", {
-        status: profileResponse.status,
-        bodySnippet: profileBodyText.slice(0, 200),
-        requestId,
-        tokenPrefix,
-      }),
-      { status: 500 },
-    );
+  } catch (error) {
+    console.error("PROFILE_FAILED", error);
+    return NextResponse.json(errorPayload("route.catch", error), {
+      status: 500,
+    });
   }
 
   const profileData = JSON.parse(profileBodyText) as Array<{
@@ -235,12 +155,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ profile: data });
   } catch (error) {
     console.error("PROFILE_FAILED", error);
-    return NextResponse.json(
-      errorPayload("route.catch", error, {
-        requestId,
-        tokenPrefix,
-      }),
-      { status: 500 },
-    );
+    return NextResponse.json(errorPayload("route.catch", error), {
+      status: 500,
+    });
   }
 }
