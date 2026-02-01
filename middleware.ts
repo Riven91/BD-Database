@@ -1,42 +1,55 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const PRODUCTION_HOST = "management.blooddiamond-tattoo.de";
+const PUBLIC_FILE = /\.(.*)$/;
 
-const isExcludedRoute = (pathname: string) => {
-  if (pathname === "/login" || pathname === "/favicon.ico") {
-    return true;
-  }
+function isBypassPath(pathname: string) {
+  // Allow login and everything needed for the app to load and auth to work
+  if (pathname === "/login" || pathname.startsWith("/login/")) return true;
 
-  if (pathname.startsWith("/api/") || pathname.startsWith("/_next/")) {
-    return true;
-  }
+  // Never gate APIs or Next internals/assets
+  if (pathname.startsWith("/api")) return true;
+  if (pathname.startsWith("/_next")) return true;
 
-  return /\.(.*)$/.test(pathname);
-};
+  // Public files
+  if (pathname === "/favicon.ico") return true;
+  if (pathname === "/robots.txt") return true;
+  if (pathname === "/sitemap.xml") return true;
+  if (PUBLIC_FILE.test(pathname)) return true;
 
-export async function middleware(req: NextRequest) {
+  return false;
+}
+
+function hasSupabaseSessionCookie(req: NextRequest) {
+  // Supabase typically stores cookies starting with "sb-".
+  // We treat presence of any sb-* cookie with a value as "logged in".
+  const cookies = req.cookies.getAll();
+  return cookies.some((c) => c.name.startsWith("sb-") && !!c.value);
+}
+
+export function middleware(req: NextRequest) {
   const host = req.headers.get("host") || "";
-  if (host !== PRODUCTION_HOST) {
-    return NextResponse.next();
-  }
+
+  // Only enforce on the real production host
+  if (host !== PRODUCTION_HOST) return NextResponse.next();
 
   const { pathname } = req.nextUrl;
-  if (isExcludedRoute(pathname)) {
-    return NextResponse.next();
-  }
 
-  const isAuthenticated = req.cookies
-    .getAll()
-    .some((cookie) => cookie.name.startsWith("sb-") && cookie.value);
+  // Do not gate login, api, next assets, public files
+  if (isBypassPath(pathname)) return NextResponse.next();
 
-  if (!isAuthenticated) {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(redirectUrl);
+  // Gate everything else
+  if (!hasSupabaseSessionCookie(req)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
   }
 
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/((?!_next|api).*)"] };
+export const config = {
+  matcher: ["/:path*"],
+};
+
