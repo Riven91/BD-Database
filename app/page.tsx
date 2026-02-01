@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   closestCenter,
   DndContext,
@@ -20,7 +20,7 @@ import clsx from "clsx";
 import { AppShell } from "@/components/app-shell";
 import AuthDebugPanel from "@/components/AuthDebugPanel";
 import LogoutButton from "@/components/LogoutButton";
-import { Button, Chip, Input } from "@/components/ui";
+import { Button, Chip, Input, Textarea } from "@/components/ui";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { supabaseBrowser } from "@/lib/supabase/browserClient";
 
@@ -158,9 +158,17 @@ export default function DashboardPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [labelSearch, setLabelSearch] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createPhone, setCreatePhone] = useState("");
+  const [createLocationId, setCreateLocationId] = useState("");
+  const [createLabels, setCreateLabels] = useState("");
+  const [createNote, setCreateNote] = useState("");
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const loadContacts = async () => {
+  const loadContacts = async (overridePageIndex?: number) => {
     setLoading(true);
     setErrorText(null);
     const supabase = supabaseBrowser();
@@ -188,7 +196,8 @@ export default function DashboardPage() {
 
     query = query.order(sortKey, { ascending: sortDir === "asc" });
 
-    const from = pageIndex * pageSize;
+    const activePageIndex = overridePageIndex ?? pageIndex;
+    const from = activePageIndex * pageSize;
     const to = from + pageSize - 1;
     query = query.range(from, to);
 
@@ -209,6 +218,28 @@ export default function DashboardPage() {
       setTotalCount(count ?? 0);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const response = await fetchWithAuth("/api/contacts/stats");
+      const text = await response.text();
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {}
+      if (!response.ok) {
+        console.error("STATS_FETCH_ERROR_RAW", { status: response.status, text });
+        setStatsError(JSON.stringify(parsed ?? { raw: text }, null, 2));
+        return;
+      }
+      const payload = parsed ?? null;
+      setStats(payload ?? null);
+      setStatsError(null);
+    } catch (error) {
+      console.error("DASHBOARD_STATS_ERROR", error);
+      setStatsError("Failed to load stats.");
     }
   };
 
@@ -237,33 +268,18 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const loadStats = async () => {
-      try {
-        const response = await fetchWithAuth("/api/contacts/stats");
-        const text = await response.text();
-        let parsed: any = null;
-        try {
-          parsed = JSON.parse(text);
-        } catch {}
-        if (!response.ok) {
-          console.error("STATS_FETCH_ERROR_RAW", { status: response.status, text });
-          setStatsError(JSON.stringify(parsed ?? { raw: text }, null, 2));
-          return;
-        }
-        const payload = parsed ?? null;
-        setStats(payload ?? null);
-        setStatsError(null);
-      } catch (error) {
-        console.error("DASHBOARD_STATS_ERROR", error);
-        setStatsError("Failed to load stats.");
-      }
-    };
     loadStats();
   }, []);
 
   useEffect(() => {
     setLabelSearch("");
   }, [expandedId]);
+
+  useEffect(() => {
+    if (!createLocationId && locations.length) {
+      setCreateLocationId(locations[0].id);
+    }
+  }, [createLocationId, locations]);
 
   const filteredContacts = useMemo(() => {
     if (!labelFilters.length) return contacts;
@@ -337,6 +353,52 @@ export default function DashboardPage() {
     }
   };
 
+  const handleCreateContact = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setCreateLoading(true);
+    setCreateError(null);
+    try {
+      const response = await fetchWithAuth("/api/contacts/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: createName.trim() || null,
+          phoneRaw: createPhone,
+          locationId: createLocationId,
+          labels: createLabels
+            .split(",")
+            .map((label) => label.trim())
+            .filter(Boolean),
+          note: createNote.trim() || null
+        })
+      });
+      const text = await response.text();
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {}
+      if (!response.ok) {
+        setCreateError(JSON.stringify(parsed ?? { raw: text }, null, 2));
+        return;
+      }
+      setShowCreateModal(false);
+      setCreateName("");
+      setCreatePhone("");
+      setCreateLabels("");
+      setCreateNote("");
+      setCreateError(null);
+      setPageIndex(0);
+      await loadContacts(0);
+      await loadStats();
+    } catch (error) {
+      setCreateError(
+        JSON.stringify({ error: error instanceof Error ? error.message : error }, null, 2)
+      );
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
   return (
     <AppShell
       title="Kontakte"
@@ -390,6 +452,19 @@ export default function DashboardPage() {
         ) : (
           <div className="mt-2 text-xs text-text-muted">Lade Statistiken...</div>
         )}
+      </section>
+      <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
+        <div className="text-text-muted">
+          Manuelle Kontakte hinzufügen und verwalten.
+        </div>
+        <Button
+          onClick={() => {
+            setCreateError(null);
+            setShowCreateModal(true);
+          }}
+        >
+          Kontakt hinzufügen
+        </Button>
       </section>
       <section className="mb-6 grid gap-4 rounded-lg border border-base-800 bg-base-850 p-4 md:grid-cols-6">
         <Input
@@ -700,6 +775,121 @@ export default function DashboardPage() {
           })
         )}
       </section>
+      {showCreateModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-2xl rounded-lg border border-base-800 bg-base-850 p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-text-primary">
+                  Kontakt hinzufügen
+                </h2>
+                <p className="text-sm text-text-muted">
+                  Lege einen neuen Kontakt manuell an.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                disabled={createLoading}
+              >
+                Schließen
+              </Button>
+            </div>
+            <form className="space-y-4" onSubmit={handleCreateContact}>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-xs uppercase text-text-muted">Name</label>
+                  <Input
+                    placeholder="Optionaler Name"
+                    value={createName}
+                    onChange={(event) => setCreateName(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs uppercase text-text-muted">
+                    Telefon *
+                  </label>
+                  <Input
+                    required
+                    placeholder="+49..."
+                    value={createPhone}
+                    onChange={(event) => setCreatePhone(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs uppercase text-text-muted">
+                    Standort *
+                  </label>
+                  <select
+                    className="w-full rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
+                    value={createLocationId}
+                    onChange={(event) => setCreateLocationId(event.target.value)}
+                    required
+                  >
+                    <option value="" disabled>
+                      Standort wählen
+                    </option>
+                    {locations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs uppercase text-text-muted">Labels</label>
+                  <Input
+                    placeholder="z.B. Stammkunde, VIP"
+                    value={createLabels}
+                    onChange={(event) => setCreateLabels(event.target.value)}
+                  />
+                  <p className="mt-1 text-xs text-text-muted">
+                    Kommagetrennte Labels eingeben.
+                  </p>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs uppercase text-text-muted">Notiz</label>
+                <Textarea
+                  rows={4}
+                  placeholder="Optionaler Hinweis"
+                  value={createNote}
+                  onChange={(event) => setCreateNote(event.target.value)}
+                />
+              </div>
+              {createError ? (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+                  <div className="font-medium text-amber-200">
+                    Fehler beim Speichern
+                  </div>
+                  <pre className="mt-2 whitespace-pre-wrap text-xs text-amber-100">
+                    {createError}
+                  </pre>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-text-muted">
+                  {createLoading ? "Speichern..." : "Felder mit * sind Pflicht."}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    disabled={createLoading}
+                  >
+                    Abbrechen
+                  </Button>
+                  <Button type="submit" disabled={createLoading}>
+                    {createLoading ? "Speichern..." : "Kontakt speichern"}
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </AppShell>
   );
 }
