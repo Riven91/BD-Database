@@ -3,8 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 function getSupabaseConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
   if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL is missing");
   if (!anonKey) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is missing");
+
   return { url, anonKey };
 }
 
@@ -12,7 +14,9 @@ let _browserClient: ReturnType<typeof createClient> | null = null;
 
 function getBrowserSupabase() {
   if (_browserClient) return _browserClient;
+
   const { url, anonKey } = getSupabaseConfig();
+
   _browserClient = createClient(url, anonKey, {
     auth: {
       persistSession: true,
@@ -20,6 +24,7 @@ function getBrowserSupabase() {
       detectSessionInUrl: false,
     },
   });
+
   return _browserClient;
 }
 
@@ -33,9 +38,12 @@ export async function fetchWithAuth(input: RequestInfo | URL, init: RequestInit 
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  return fetch(input, {
+  // Always include cookies too (important for some server routes / edge cases)
+  const res = await fetch(input, {
     ...init,
     headers,
     credentials: "include",
   });
+
+  return res;
 }
