@@ -1,19 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { Button, Input } from "@/components/ui";
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Read ?next=... from the URL without useSearchParams (avoids Suspense/SSG issues)
+  const nextPath = useMemo(() => {
+    if (typeof window === "undefined") return "/";
+    const sp = new URLSearchParams(window.location.search);
+    return sp.get("next") || "/";
+  }, []);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -30,15 +35,13 @@ export default function LoginPage() {
 
       if (signInError) {
         setError(signInError.message);
-        setLoading(false);
         return;
       }
 
-      // IMPORTANT: after login, refresh server state so /api/* sees the session
+      // Ensure server state updates
       router.refresh();
 
-      // Now call profile WITHOUT custom fetchWithAuth.
-      // If cookies/session are available, the server can authenticate.
+      // Call profile without custom token plumbing
       const profileResponse = await fetch("/api/profile", {
         method: "POST",
         credentials: "include",
@@ -47,7 +50,6 @@ export default function LoginPage() {
 
       if (profileResponse.ok) {
         const payload = await profileResponse.json();
-
         if (!payload?.profile?.location_id) {
           router.replace("/onboarding");
           router.refresh();
@@ -55,7 +57,7 @@ export default function LoginPage() {
         }
       }
 
-      router.replace(next);
+      router.replace(nextPath);
       router.refresh();
     } catch (e: any) {
       setError(e?.message || "Login fehlgeschlagen");
@@ -105,4 +107,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
