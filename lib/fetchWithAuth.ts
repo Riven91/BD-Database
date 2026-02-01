@@ -1,24 +1,25 @@
-"use client";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
-import { getPlainSupabaseBrowser } from "@/lib/supabase/plainBrowserClient";
-
-export async function fetchWithAuth(
-  input: RequestInfo,
-  init: RequestInit = {}
-) {
-  const supabase = getPlainSupabaseBrowser();
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-
+export async function fetchWithAuth(input: RequestInfo | URL, init: RequestInit = {}) {
+  // Always include cookies (cookie auth must work in inkognito)
   const headers = new Headers(init.headers || {});
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  if (
-    !headers.has("Content-Type") &&
-    init.body &&
-    !(init.body instanceof FormData)
-  ) {
-    headers.set("Content-Type", "application/json");
+
+  // Optional: attach bearer token if available (not required)
+  try {
+    const supabase = createClientComponentClient();
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token ?? null;
+
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+  } catch {
+    // ignore: cookie auth may be used without readable session client-side
   }
 
-  return fetch(input, { ...init, headers });
+  return fetch(input, {
+    ...init,
+    headers,
+    credentials: "include",
+  });
 }
