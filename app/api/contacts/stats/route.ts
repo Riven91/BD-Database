@@ -29,11 +29,11 @@ export async function GET(request: Request) {
   }
 
   // Total contacts
-  const totalResult = await supabase
+  const totalRes = await supabase
     .from("contacts")
     .select("id", { count: "exact", head: true });
 
-  if (totalResult.error) {
+  if (totalRes.error) {
     return NextResponse.json(
       {
         error: "stats_failed",
@@ -65,7 +65,7 @@ export async function GET(request: Request) {
   }
 
   // Missing phone count
-  const missingPhoneResult = await supabase
+  const missingPhoneRes = await supabase
     .from("contacts")
     .select("id", { count: "exact", head: true })
     .is("phone_e164", null);
