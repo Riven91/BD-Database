@@ -26,7 +26,7 @@ function createAnonClient(token?: string) {
 }
 
 function getBearerToken(request: Request) {
-  const authHeader = request.headers.get("authorization") ?? "";
+  const authHeader = request.headers.get("Authorization") ?? "";
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   return match?.[1] ?? null;
 }
