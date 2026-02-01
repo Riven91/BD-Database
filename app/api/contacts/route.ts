@@ -1,75 +1,65 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
+import { requireUser } from "@/lib/supabase/requireUser";
+import { getSupabaseServiceClient } from "@/lib/supabase/serviceServerClient";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const locationMap = new Map<string, string>([
-  ["heilbronn", "Heilbronn"],
-  ["hb", "Heilbronn"],
-  ["pforzheim", "Pforzheim"],
-  ["pf", "Pforzheim"],
-  ["boeblingen", "Böblingen"],
-  ["böblingen", "Böblingen"],
-  ["bb", "Böblingen"]
-]);
-
-function normalizeLocationParam(value: string | null) {
-  if (!value) return null;
-  const key = value.toLowerCase();
-  if (key === "all") return null;
-  return locationMap.get(key) ?? null;
+function intParam(url: URL, key: string, fallback: number) {
+  const v = url.searchParams.get(key);
+  const n = v ? Number(v) : NaN;
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 }
 
 export async function GET(request: Request) {
-  const { supabase, user } = await getSupabaseAuthed(request);
+  const { user } = await requireUser(request);
   if (!user) {
     return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }
 
   const url = new URL(request.url);
-  const rawLocationParam = url.searchParams.get("location");
-  const locationFilter = normalizeLocationParam(rawLocationParam);
-  const pageIndex = Math.max(0, Number.parseInt(url.searchParams.get("page") ?? "0", 10) || 0);
-  const pageSize = Math.max(1, Number.parseInt(url.searchParams.get("pageSize") ?? "100", 10) || 100);
-  const from = pageIndex * pageSize;
-  const to = from + pageSize - 1;
-  if (
-    url.searchParams.has("location") &&
-    !locationFilter &&
-    rawLocationParam?.toLowerCase() !== "all"
-  ) {
-    return NextResponse.json({ error: "Invalid location filter" }, { status: 400 });
-  }
 
+  const page = intParam(url, "page", 1);
+  const perPage = intParam(url, "perPage", 100);
+  const from = (page - 1) * perPage;
+  const to = from + perPage - 1;
+
+  const q = (url.searchParams.get("q") || "").trim();
+  const locationId = (url.searchParams.get("location_id") || "").trim();
+
+  const supabase = getSupabaseServiceClient();
+
+  // Base query
   let query = supabase
     .from("contacts")
-    .select(
-      "id, name, first_name, last_name, phone_e164, status, location:locations(name), labels:contact_labels(labels(id,name,sort_order,is_archived))",
-      { count: "exact" }
-    )
+    .select("*", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, to);
 
-  if (locationFilter) {
-    query = query.eq("locations.name", locationFilter);
+  // Optional filters (only if your schema has these columns)
+  if (locationId) {
+    query = query.eq("location_id", locationId);
+  }
+
+  // Simple search (best-effort: adjust columns if your schema differs)
+  if (q) {
+    // tries name OR phone_e164 (common in your project)
+    query = query.or(`name.ilike.%${q}%,phone_e164.ilike.%${q}%`);
   }
 
   const { data, error, count } = await query;
 
   if (error) {
     return NextResponse.json(
-      { error: { message: error.message, code: error.code ?? null } },
+      { error: "contacts_select_failed", message: error.message, details: (error as any).details ?? null },
       { status: 500 }
     );
   }
 
-  const contacts = (data ?? []).map((contact: any) => ({
-    ...contact,
-    labels: (contact.labels ?? [])
-      .map((item: any) => item.labels)
-      .filter(Boolean)
-  }));
-
-  return NextResponse.json({ contacts, count: count ?? 0 });
+  return NextResponse.json({
+    page,
+    perPage,
+    total: count ?? 0,
+    contacts: data ?? [],
+  });
 }
