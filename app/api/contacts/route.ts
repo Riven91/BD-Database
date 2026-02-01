@@ -30,6 +30,10 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const rawLocationParam = url.searchParams.get("location");
   const locationFilter = normalizeLocationParam(rawLocationParam);
+  const pageIndex = Math.max(0, Number.parseInt(url.searchParams.get("page") ?? "0", 10) || 0);
+  const pageSize = Math.max(1, Number.parseInt(url.searchParams.get("pageSize") ?? "100", 10) || 100);
+  const from = pageIndex * pageSize;
+  const to = from + pageSize - 1;
   if (
     url.searchParams.has("location") &&
     !locationFilter &&
@@ -41,16 +45,17 @@ export async function GET(request: Request) {
   let query = supabase
     .from("contacts")
     .select(
-      "id, name, first_name, last_name, phone_e164, status, location:locations(name), labels:contact_labels(labels(id,name,sort_order,is_archived))"
+      "id, name, first_name, last_name, phone_e164, status, location:locations(name), labels:contact_labels(labels(id,name,sort_order,is_archived))",
+      { count: "exact" }
     )
     .order("created_at", { ascending: false })
-    .range(0, 199);
+    .range(from, to);
 
   if (locationFilter) {
     query = query.eq("locations.name", locationFilter);
   }
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
 
   if (error) {
     return NextResponse.json(
@@ -66,5 +71,5 @@ export async function GET(request: Request) {
       .filter(Boolean)
   }));
 
-  return NextResponse.json({ contacts });
+  return NextResponse.json({ contacts, count: count ?? 0 });
 }
