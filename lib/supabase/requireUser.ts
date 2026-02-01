@@ -1,10 +1,10 @@
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
-type AuthMode = "bearer" | "cookie" | "none";
+export type AuthMode = "bearer" | "cookie" | "none";
 
-function getSupabaseConfig() {
+function getEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -15,19 +15,28 @@ function getSupabaseConfig() {
 }
 
 function createAnonClient(token?: string) {
-  const { url, anonKey } = getSupabaseConfig();
+  const { url, anonKey } = getEnv();
+
   return createClient(url, anonKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
+      detectSessionInUrl: false,
     },
     global: token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
   });
 }
 
 function getBearerToken(request: Request) {
-  const authHeader = request.headers.get("authorization") ?? request.headers.get("Authorization") ?? "";
+  // be tolerant with header casing
+  const authHeader =
+    request.headers.get("authorization") ??
+    request.headers.get("Authorization") ??
+    "";
+
+  // THIS MUST BE "Bearer" without spaces
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
+
   const token = match?.[1]?.trim() ?? null;
   return token || null;
 }
@@ -47,6 +56,7 @@ export async function requireUser(request: Request) {
   if (token && looksLikeJwt(token)) {
     const supabase = createAnonClient();
     const { data, error } = await supabase.auth.getUser(token);
+
     return {
       user: data?.user ?? null,
       mode: (data?.user ? "bearer" : "none") as AuthMode,
@@ -57,6 +67,7 @@ export async function requireUser(request: Request) {
   // 2) Fallback: Cookie-based user (useful for UI gating, not the main truth)
   const supabase = createRouteHandlerClient({ cookies });
   const { data, error } = await supabase.auth.getUser();
+
   return {
     user: data?.user ?? null,
     mode: (data?.user ? "cookie" : "none") as AuthMode,
@@ -64,9 +75,11 @@ export async function requireUser(request: Request) {
   };
 }
 
-export async function getSupabaseAuthed(request: Request): Promise<{
-  supabase: SupabaseClient;
-  user: Awaited<ReturnType<typeof requireUser>>["user"];
+export async function getSupabaseAuthed(
+  request: Request
+): Promise<{
+  supabase: ReturnType<typeof createAnonClient> | ReturnType<typeof createRouteHandlerClient>;
+  user: any | null;
   mode: AuthMode;
 }> {
   const token = getBearerToken(request);
@@ -82,5 +95,6 @@ export async function getSupabaseAuthed(request: Request): Promise<{
   const supabase = createRouteHandlerClient({ cookies });
   const { data } = await supabase.auth.getUser();
   if (!data?.user) return { supabase, user: null, mode: "none" };
+
   return { supabase, user: data.user, mode: "cookie" };
 }
