@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Input } from "@/components/ui";
-import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { getPlainSupabaseBrowser } from "@/lib/supabase/plainBrowserClient";
 
 export default function LoginPage() {
@@ -27,7 +26,7 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-    const profileResponse = await fetchWithAuth("/api/profile", { method: "POST" });
+    const profileResponse = await fetch("/api/profile", { method: "POST" });
     if (profileResponse.ok) {
       const payload = await profileResponse.json();
       if (!payload.profile?.location_id) {

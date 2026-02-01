@@ -1,40 +1,59 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
+import { supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET(request: Request) {
+function profileError(where: string, message: string) {
+  return NextResponse.json(
+    {
+      error: "profile_failed",
+      where,
+      message,
+    },
+    { status: 500 },
+  );
+}
+
+export async function GET() {
   try {
-    const { user } = await getSupabaseAuthed(request);
-    if (!user) {
+    const supabase = supabaseServer();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error || !user) {
       return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
     }
 
-    return NextResponse.json(
-      {
-        id: user.id,
-        email: user.email ?? null,
-      },
-      { status: 200 },
-    );
+    const { data: profile, error: profileErrorResponse } = await supabase
+      .from("profiles")
+      .select("id, role, location_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileErrorResponse) {
+      return profileError("route.get.profile", profileErrorResponse.message);
+    }
+
+    return NextResponse.json({ profile });
   } catch (error) {
     console.error("PROFILE_FAILED", error);
-    return NextResponse.json(
-      {
-        error: "profile_failed",
-        where: "route.catch",
-        message: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
+    return profileError(
+      "route.catch",
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
 
-export async function POST(request: Request) {
+export async function POST() {
   try {
-    const { supabase, user } = await getSupabaseAuthed(request);
-    if (!user) {
+    const supabase = supabaseServer();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error || !user) {
       return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
     }
 
@@ -45,7 +64,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (existingError) {
-      throw existingError;
+      return profileError("route.post.profile_select", existingError.message);
     }
 
     if (existing) {
@@ -59,27 +78,27 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      throw error;
+      return profileError("route.post.profile_insert", error.message);
     }
 
     return NextResponse.json({ profile: data });
   } catch (error) {
     console.error("PROFILE_FAILED", error);
-    return NextResponse.json(
-      {
-        error: "profile_failed",
-        where: "route.catch",
-        message: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
+    return profileError(
+      "route.catch",
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
 
 export async function PATCH(request: Request) {
   try {
-    const { supabase, user } = await getSupabaseAuthed(request);
-    if (!user) {
+    const supabase = supabaseServer();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error || !user) {
       return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
     }
 
@@ -100,19 +119,15 @@ export async function PATCH(request: Request) {
       .single();
 
     if (error) {
-      throw error;
+      return profileError("route.patch.profile_update", error.message);
     }
 
     return NextResponse.json({ profile: data });
   } catch (error) {
     console.error("PROFILE_FAILED", error);
-    return NextResponse.json(
-      {
-        error: "profile_failed",
-        where: "route.catch",
-        message: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
+    return profileError(
+      "route.catch",
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
