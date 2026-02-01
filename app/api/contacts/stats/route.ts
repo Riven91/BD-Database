@@ -38,7 +38,27 @@ export async function GET(request: Request) {
       {
         error: "stats_failed",
         where: "contacts.total",
-        ...serializeSupaError(totalRes.error)
+        ...serializeSupaError(totalResult.error)
+      },
+      { status: 500 }
+    );
+  }
+
+  // Missing name count aligned with dashboard display logic.
+  // Missing means all candidate fields are empty or null.
+  const missingNameResult = await supabase
+    .from("contacts")
+    .select("id", { count: "exact", head: true })
+    .or(
+      "and(or(name.is.null,name.eq.),or(display_name.is.null,display_name.eq.),or(full_name.is.null,full_name.eq.),or(first_name.is.null,first_name.eq.),or(last_name.is.null,last_name.eq.))"
+    );
+
+  if (missingNameResult.error) {
+    return NextResponse.json(
+      {
+        error: "stats_failed",
+        where: "contacts.missingName",
+        ...serializeSupaError(missingNameResult.error)
       },
       { status: 500 }
     );
@@ -50,47 +70,18 @@ export async function GET(request: Request) {
     .select("id", { count: "exact", head: true })
     .is("phone_e164", null);
 
-  if (missingPhoneRes.error) {
+  if (missingPhoneResult.error) {
     return NextResponse.json(
       {
         error: "stats_failed",
         where: "contacts.missingPhone",
-        ...serializeSupaError(missingPhoneRes.error)
+        ...serializeSupaError(missingPhoneResult.error)
       },
       { status: 500 }
     );
   }
 
-  const sampleLimit = 5000;
-  const sampleRes = await supabase
-    .from("contacts")
-    .select("name, display_name, full_name, first_name, last_name, created_at")
-    .order("created_at", { ascending: false })
-    .limit(sampleLimit);
-
-  if (sampleRes.error) {
-    return NextResponse.json(
-      {
-        error: "stats_failed",
-        where: "contacts.sample",
-        ...serializeSupaError(sampleRes.error)
-      },
-      { status: 500 }
-    );
-  }
-
-  const isBlank = (value: unknown) =>
-    value == null || (typeof value === "string" && value.trim().length === 0);
-  const missingNameSample = (sampleRes.data ?? []).filter(
-    (row) =>
-      isBlank(row.name) &&
-      isBlank(row.display_name) &&
-      isBlank(row.full_name) &&
-      isBlank(row.first_name) &&
-      isBlank(row.last_name)
-  ).length;
-
-  const { data: byLocationCounts, error: rpcError } = await supabase.rpc(
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
     "contacts_counts_by_location"
   );
 
@@ -106,20 +97,18 @@ export async function GET(request: Request) {
     );
   }
 
-  const typedByLocationCounts =
-    (byLocationCounts as LocationCountRow[] | null) ?? [];
-  const byLocation = typedByLocationCounts.map((row: LocationCountRow) => ({
-    name: row.location_name ?? "Unbekannt",
-    count: typeof row.count === "string" ? Number(row.count) : (row.count ?? 0)
-  }));
+  const byLocationCounts = (rpcData as LocationCountRow[] | null) ?? [];
+  const byLocation =
+    byLocationCounts.map((row: LocationCountRow) => ({
+      name: row.location_name ?? "Unbekannt",
+      count: typeof row.count === "string" ? Number(row.count) : (row.count ?? 0)
+    }));
 
   return NextResponse.json({
     ok: true,
-    total: totalRes.count ?? 0,
-    missingPhone: missingPhoneRes.count ?? 0,
-    missingNameSample,
-    sampleLimit,
-    missingNameIsSample: true,
+    total: totalResult.count ?? 0,
+    missingName: missingNameResult.count ?? 0,
+    missingPhone: missingPhoneResult.count ?? 0,
     byLocation
   });
 }
