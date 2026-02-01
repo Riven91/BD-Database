@@ -16,82 +16,56 @@ function errorPayload(where: string, error: unknown) {
   };
 }
 
+async function safeReadProfile(supabase: any, userId: string) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("location_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  // Table missing → treat as "no profile"
+  if (error?.code === "42P01") {
+    return { location_id: null, warning: null };
+  }
+
+  // IMPORTANT: Any other error (RLS, permission, etc.) must NOT brick login.
+  if (error) {
+    return { location_id: null, warning: errorPayload("profiles.select", error) };
+  }
+
+  return { location_id: data?.location_id ?? null, warning: null };
+}
+
 export async function GET(request: Request) {
   try {
     const { supabase, user } = await getSupabaseAuthed(request);
+
     if (!user) {
       return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
     }
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("location_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (error) {
-      if (error.code === "42P01") {
-        return NextResponse.json(
-          { profile: { location_id: null } },
-          { status: 200 },
-        );
-      }
-
-      return NextResponse.json(errorPayload("profiles.select", error), {
-        status: 500,
-      });
-    }
+    const { location_id, warning } = await safeReadProfile(supabase, user.id);
 
     return NextResponse.json(
-      {
-        profile: { location_id: data?.location_id ?? null },
-      },
+      warning
+        ? { profile: { location_id }, warning }
+        : { profile: { location_id } },
       { status: 200 },
     );
   } catch (error) {
     console.error("PROFILE_FAILED", error);
-    return NextResponse.json(errorPayload("route.catch", error), {
-      status: 500,
-    });
+
+    // IMPORTANT: do NOT hard-fail login UX because of profile route
+    return NextResponse.json(
+      { profile: { location_id: null }, warning: errorPayload("route.catch", error) },
+      { status: 200 },
+    );
   }
 }
 
 export async function POST(request: Request) {
-  try {
-    const { supabase, user } = await getSupabaseAuthed(request);
-    if (!user) {
-      return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
-    }
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("location_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (error) {
-      if (error.code === "42P01") {
-        return NextResponse.json(
-          { profile: { location_id: null } },
-          { status: 200 },
-        );
-      }
-
-      return NextResponse.json(errorPayload("profiles.select", error), {
-        status: 500,
-      });
-    }
-
-    return NextResponse.json(
-      { profile: { location_id: data?.location_id ?? null } },
-      { status: 200 },
-    );
-  } catch (error) {
-    console.error("PROFILE_FAILED", error);
-    return NextResponse.json(errorPayload("route.catch", error), {
-      status: 500,
-    });
-  }
+  // keep behavior identical to GET (no surprises)
+  return GET(request);
 }
 
 export async function PATCH(request: Request) {
@@ -103,11 +77,9 @@ export async function PATCH(request: Request) {
 
     const body = await request.json();
     const locationId = body.location_id;
+
     if (!locationId || typeof locationId !== "string") {
-      return NextResponse.json(
-        { error: "Missing location_id" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Missing location_id" }, { status: 400 });
     }
 
     const { data, error } = await supabase
@@ -118,14 +90,13 @@ export async function PATCH(request: Request) {
       .single();
 
     if (error) {
-      throw error;
+      // update errors should be explicit but not "server exploded"
+      return NextResponse.json(errorPayload("profiles.update", error), { status: 400 });
     }
 
-    return NextResponse.json({ profile: data });
+    return NextResponse.json({ profile: data }, { status: 200 });
   } catch (error) {
     console.error("PROFILE_FAILED", error);
-    return NextResponse.json(errorPayload("route.catch", error), {
-      status: 500,
-    });
+    return NextResponse.json(errorPayload("route.catch", error), { status: 500 });
   }
 }
