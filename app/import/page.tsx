@@ -1,171 +1,313 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
+import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui";
+import { mapRow, type CsvRow, type NormalizedContact } from "@/lib/import-utils";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
-type PreviewResult =
-  | {
-      ok: true;
-      format: "csv";
-      meta: { name: string; type: string; size: number };
-      detectedDelimiter: string;
-      headers: string[];
-      count: number;
-      contacts: Record<string, string>[];
-      preview: Record<string, string>[];
-    }
-  | {
-      error: string;
-      where?: string;
-      details?: any;
-      keys?: string[];
-      meta?: any;
-      detectedDelimiter?: string;
-      headSnippet?: string;
-      name?: string;
-      message?: string;
-    };
+type PreviewStats = {
+  newCount: number;
+  updateCount: number;
+  errors: { row: number; field: string; message: string }[];
+};
+
+type PreviewRow = {
+  rowNumber: number;
+  name: string;
+  phone: string;
+  location: string;
+  labels: string;
+  isValid: boolean;
+};
+
+function chunk<T>(arr: T[], size: number) {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+function safeJsonParse(text: string) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
 
 export default function ImportPage() {
-  const [file, setFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const [previewContacts, setPreviewContacts] = useState<NormalizedContact[]>([]);
+  const [previewStats, setPreviewStats] = useState<PreviewStats | null>(null);
+  const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [importResult, setImportResult] = useState<{
+    created: number;
+    updated: number;
+    skipped: number;
+    errors: { row?: number; phone?: string; message: string }[];
+  } | null>(null);
+  const [importResultText, setImportResultText] = useState<string | null>(null);
 
-  const [rawStatus, setRawStatus] = useState<number | null>(null);
-  const [rawText, setRawText] = useState<string>("");
-  const [parsed, setParsed] = useState<PreviewResult | null>(null);
+  const handleFile = async (file: File) => {
+    setPreviewStats(null);
+    setPreviewContacts([]);
+    setPreviewRows([]);
+    setImportResult(null);
+    setImportResultText(null);
+    setErrorMessage("");
 
-  const canRun = useMemo(() => Boolean(file) && !loading, [file, loading]);
+    const isCsv = file.name.toLowerCase().endsWith(".csv");
+    const data = isCsv ? await file.text() : await file.arrayBuffer();
+    const workbook = XLSX.read(data, { type: isCsv ? "string" : "array" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
 
-  async function runPreview() {
-    if (!file) return;
+    const normalizeRow = (row: Record<string, any>) =>
+      Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [key, value == null ? "" : String(value)])
+      );
 
-    setLoading(true);
-    setRawStatus(null);
-    setRawText("");
-    setParsed(null);
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, {
+      defval: "",
+      raw: false
+    });
+    const rows = rawRows.map(normalizeRow) as CsvRow[];
+
+    const issues: PreviewStats["errors"] = [];
+    const contacts: NormalizedContact[] = [];
+    const preview: PreviewRow[] = [];
+
+    rows.forEach((row, index) => {
+      const rowNumber = index + 2;
+      const { contact, issues: rowIssues } = mapRow(row, rowNumber);
+      if (rowIssues.length) issues.push(...rowIssues);
+      if (contact) contacts.push(contact);
+
+      preview.push({
+        rowNumber,
+        name: [row["Vorname"], row["Nachname"]].filter(Boolean).join(" ").trim(),
+        phone: row["Telefon"] ?? "",
+        location: row["Standort"] ?? "",
+        labels: row["Labels"] ?? "",
+        isValid: Boolean(contact)
+      });
+    });
+
+    // Preview-Call (Cookie-Auth ist bei dir die Wahrheit)
+    const formData = new FormData();
+    formData.append("file", file);
 
     try {
-      const form = new FormData();
-      form.set("file", file);
-
-      // WICHTIG:
-      // - POST auf /api/import/preview (nicht /import)
-      // - credentials: include (Cookie-Auth)
-      // - KEIN manual Content-Type bei FormData
-      const res = await fetchWithAuth("/api/import/preview", {
+      const response = await fetchWithAuth("/api/import/preview", {
         method: "POST",
-        body: form
+        body: formData
       });
 
-      const text = await res.text();
-      setRawStatus(res.status);
-      setRawText(text);
+      const text = await response.text();
+      const parsed = safeJsonParse(text);
 
-      let json: any = null;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = null;
+      if (!response.ok) {
+        throw new Error(parsed ? JSON.stringify(parsed) : text || `HTTP ${response.status}`);
       }
 
-      if (!res.ok) {
-        // Wir lassen es stehen, damit du den echten Fehler siehst
-        setParsed((json ?? { error: "non_json_error", message: text }) as PreviewResult);
-        return;
-      }
+      // Unterstützt beide Shapes:
+      // A) { existing: ["+49..."] }  (alte Logik)
+      // B) { ok:true, ... }         (neue stabile Preview-API)
+      const existingArr: string[] = Array.isArray(parsed?.existing) ? parsed.existing : [];
+      const existingSet = new Set(existingArr);
 
-      setParsed((json ?? null) as PreviewResult);
-    } catch (e: any) {
-      setRawStatus(-1);
-      setRawText(String(e?.message ?? e ?? "unknown error"));
-      setParsed({ error: "client_fetch_failed", details: String(e?.message ?? e) });
-    } finally {
-      setLoading(false);
+      const phones = contacts.map((c) => c.phone_e164).filter(Boolean);
+      const newCount = existingArr.length
+        ? phones.filter((p) => !existingSet.has(p)).length
+        : phones.length; // wenn keine existing-Liste geliefert wird, zählen wir alles als "neu"
+      const updateCount = existingArr.length ? phones.filter((p) => existingSet.has(p)).length : 0;
+
+      setPreviewContacts(contacts);
+      setPreviewStats({ newCount, updateCount, errors: issues });
+      setPreviewRows(preview.slice(0, 50));
+    } catch (error) {
+      console.error("Import preview failed", error);
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-  }
+  };
+
+  const handleConfirm = async () => {
+    setIsImporting(true);
+    setErrorMessage("");
+    setImportResult(null);
+    setImportResultText(null);
+
+    try {
+      console.log("CONFIRM:start", { count: previewContacts?.length });
+
+      const batches = chunk(previewContacts, 200);
+      const totals = {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [] as { row?: number; phone?: string; message: string }[]
+      };
+
+      for (let i = 0; i < batches.length; i += 1) {
+        const batch = batches[i];
+        console.log(`CONFIRM:batch ${i + 1}/${batches.length}`, { count: batch.length });
+
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 55000);
+
+        try {
+          const res = await fetchWithAuth("/api/import/confirm", {
+            method: "POST",
+            body: JSON.stringify({ contacts: batch }),
+            signal: controller.signal
+          });
+
+          console.log("CONFIRM:after fetch", { batch: i + 1, status: res.status });
+
+          const text = await res.text();
+          const data = safeJsonParse(text);
+
+          console.log("CONFIRM:after json", { batch: i + 1, data });
+
+          if (!res.ok) {
+            throw new Error(JSON.stringify({ status: res.status, data: data ?? text }));
+          }
+
+          totals.created += data?.created ?? 0;
+          totals.updated += data?.updated ?? 0;
+          totals.skipped += data?.skipped ?? 0;
+          totals.errors = totals.errors.concat(data?.errors ?? []);
+
+          setImportResult({ ...totals });
+          setImportResultText(`Batch ${i + 1}/${batches.length} abgeschlossen`);
+        } finally {
+          clearTimeout(t);
+        }
+      }
+
+      setImportResult({ ...totals });
+      setImportResultText("Import abgeschlossen");
+      router.refresh();
+    } catch (error) {
+      console.error("Import confirm failed", error);
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+      setImportResultText(
+        `Import bestätigen fehlgeschlagen\n${JSON.stringify(error, null, 2)}`
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   return (
-    <div className="mx-auto w-full max-w-5xl p-6">
-      <h1 className="text-xl font-semibold">Import</h1>
-      <p className="mt-2 text-sm text-text-muted">
-        CSV auswählen → Preview ausführen. Ergebnis (Status + Body) wird unten angezeigt.
-      </p>
-
-      <div className="mt-6 rounded-lg border border-base-800 bg-base-850 p-4">
-        <label className="block text-xs uppercase text-text-muted">CSV Datei</label>
+    <AppShell title="Import" subtitle="XLSX/CSV Upload mit Preview">
+      <section className="rounded-lg border border-base-800 bg-base-850 p-4">
         <input
           type="file"
-          accept=".csv,text/csv"
-          className="mt-2 block w-full text-sm"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          multiple={false}
+          accept=".csv,.xlsx,.xls"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) handleFile(file);
+          }}
         />
+      </section>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm hover:bg-base-900/70 disabled:opacity-60"
-            disabled={!canRun}
-            onClick={runPreview}
-          >
-            {loading ? "Preview läuft…" : "Preview starten"}
-          </button>
-
-          <button
-            type="button"
-            className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm hover:bg-base-900/70"
-            onClick={() => {
-              setFile(null);
-              setRawStatus(null);
-              setRawText("");
-              setParsed(null);
-            }}
-            disabled={loading}
-          >
-            Reset
-          </button>
+      {errorMessage ? (
+        <div className="mt-4 rounded-md border border-red-500/60 bg-red-500/10 p-3 text-sm text-red-200">
+          {errorMessage}
         </div>
+      ) : null}
 
-        <div className="mt-4 text-xs text-text-muted">
-          Aktuelle Datei:{" "}
-          <span className="text-text-primary">
-            {file ? `${file.name} (${file.size} bytes)` : "—"}
-          </span>
-        </div>
-      </div>
+      {previewStats ? (
+        <section className="mt-6 space-y-4 rounded-lg border border-base-800 bg-base-850 p-4">
+          <h2 className="text-lg font-semibold">Preview</h2>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-base-800 bg-base-850 p-4">
-          <div className="text-xs uppercase text-text-muted">Response Status</div>
-          <div className="mt-2 text-sm text-text-primary">
-            {rawStatus === null ? "—" : String(rawStatus)}
+          <div className="grid gap-2 text-sm">
+            <div>Neue Kontakte: {previewStats.newCount}</div>
+            <div>Updates: {previewStats.updateCount}</div>
+            <div>Fehler: {previewStats.errors.length}</div>
           </div>
 
-          <div className="mt-4 text-xs uppercase text-text-muted">Raw Body</div>
-          <pre className="mt-2 max-h-[420px] overflow-auto whitespace-pre-wrap rounded-md border border-base-800 bg-base-900 p-3 text-xs text-text-primary">
-            {rawText || "—"}
-          </pre>
-        </div>
+          {previewStats.errors.length ? (
+            <ul className="text-sm text-red-400">
+              {previewStats.errors.slice(0, 10).map((issue) => (
+                <li key={`${issue.row}-${issue.field}`}>
+                  Zeile {issue.row}: {issue.field} - {issue.message}
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
-        <div className="rounded-lg border border-base-800 bg-base-850 p-4">
-          <div className="text-xs uppercase text-text-muted">Parsed JSON</div>
-          <pre className="mt-2 max-h-[520px] overflow-auto whitespace-pre-wrap rounded-md border border-base-800 bg-base-900 p-3 text-xs text-text-primary">
-            {parsed ? JSON.stringify(parsed, null, 2) : "—"}
-          </pre>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-xs uppercase text-text-muted">
+                <tr>
+                  <th className="px-3 py-2">Zeile</th>
+                  <th className="px-3 py-2">Name</th>
+                  <th className="px-3 py-2">Telefon</th>
+                  <th className="px-3 py-2">Standort</th>
+                  <th className="px-3 py-2">Labels</th>
+                  <th className="px-3 py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {previewRows.map((row) => (
+                  <tr key={row.rowNumber} className={row.isValid ? "" : "text-red-400"}>
+                    <td className="px-3 py-2">{row.rowNumber}</td>
+                    <td className="px-3 py-2">{row.name || "-"}</td>
+                    <td className="px-3 py-2">{row.phone || "-"}</td>
+                    <td className="px-3 py-2">{row.location || "-"}</td>
+                    <td className="px-3 py-2">{row.labels || "-"}</td>
+                    <td className="px-3 py-2">{row.isValid ? "OK" : "Ungültige Nummer"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-          {parsed && (parsed as any).ok === true ? (
-            <div className="mt-4 text-sm text-text-muted">
-              Preview ok:{" "}
-              <span className="text-text-primary">
-                {(parsed as any).count ?? 0} Zeilen
-              </span>{" "}
-              / Header:{" "}
-              <span className="text-text-primary">
-                {Array.isArray((parsed as any).headers) ? (parsed as any).headers.length : 0}
-              </span>
+          <Button
+            variant="primary"
+            onClick={handleConfirm}
+            disabled={isImporting || previewContacts.length === 0}
+          >
+            {isImporting ? "Import läuft..." : "Import bestätigen"}
+          </Button>
+
+          {importResult ? (
+            <div className="rounded-md border border-base-800 bg-base-900/60 p-3 text-sm">
+              <div>
+                Import fertig: {importResult.created} neu, {importResult.updated} aktualisiert,{" "}
+                {importResult.skipped} übersprungen
+              </div>
+              {importResult.errors?.length ? (
+                <ul className="mt-2 text-red-400">
+                  {importResult.errors.slice(0, 10).map((issue, index) => (
+                    <li key={`${issue.row ?? issue.phone ?? "row"}-${index}`}>
+                      {issue.row ? `Zeile ${issue.row}: ` : ""}
+                      {issue.phone ? `${issue.phone} - ` : ""}
+                      {issue.message}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           ) : null}
-        </div>
-      </div>
-    </div>
+
+          {importResultText ? (
+            <div className="rounded-md border border-base-800 bg-base-900/60 p-3 text-sm">
+              <div className="text-text-muted">Import Antwort</div>
+              <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-red-200">
+                {importResultText}
+              </pre>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+    </AppShell>
   );
 }
