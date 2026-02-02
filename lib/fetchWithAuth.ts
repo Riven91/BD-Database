@@ -1,49 +1,24 @@
-import { createClient } from "@supabase/supabase-js";
+"use client";
 
-function getSupabaseConfig() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+import { getPlainSupabaseBrowser } from "@/lib/supabase/plainBrowserClient";
 
-  if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL is missing");
-  if (!anonKey) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is missing");
-
-  return { url, anonKey };
-}
-
-let _browserClient: ReturnType<typeof createClient> | null = null;
-
-function getBrowserSupabase() {
-  if (_browserClient) return _browserClient;
-
-  const { url, anonKey } = getSupabaseConfig();
-
-  _browserClient = createClient(url, anonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: false,
-    },
-  });
-
-  return _browserClient;
-}
-
-export async function fetchWithAuth(input: RequestInfo | URL, init: RequestInit = {}) {
-  const supabase = getBrowserSupabase();
+export async function fetchWithAuth(
+  input: RequestInfo,
+  init: RequestInit = {}
+) {
+  const supabase = getPlainSupabaseBrowser();
   const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token ?? null;
+  const token = data.session?.access_token;
 
   const headers = new Headers(init.headers || {});
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (
+    !headers.has("Content-Type") &&
+    init.body &&
+    !(init.body instanceof FormData)
+  ) {
+    headers.set("Content-Type", "application/json");
   }
 
-  // Always include cookies too (important for some server routes / edge cases)
-  const res = await fetch(input, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
-
-  return res;
+  return fetch(input, { ...init, headers });
 }
