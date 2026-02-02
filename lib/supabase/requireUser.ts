@@ -19,9 +19,11 @@ function createAnonClient(token?: string) {
   return createClient(url, anonKey, {
     auth: {
       persistSession: false,
-      autoRefreshToken: false
+      autoRefreshToken: false,
     },
-    global: token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+    global: token
+      ? { headers: { Authorization: `Bearer ${token}` } }
+      : undefined,
   });
 }
 
@@ -31,43 +33,57 @@ function getBearerToken(request: Request) {
   return match?.[1] ?? null;
 }
 
+function createCookieClient() {
+  // ✅ WICHTIG: in Next 14 Route Handlers stabil nur so
+  return createRouteHandlerClient({
+    cookies: () => cookies(),
+  });
+}
+
 export async function requireUser(request: Request) {
   const token = getBearerToken(request);
+
   if (token) {
-    const supabase = createAnonClient();
-    const { data, error } = await supabase.auth.getUser(token);
+    const supabase = createAnonClient(token);
+    const { data, error } = await supabase.auth.getUser();
     return {
       user: data?.user ?? null,
       mode: "bearer" as AuthMode,
-      error
+      error,
     };
   }
 
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createCookieClient();
   const { data, error } = await supabase.auth.getUser();
+
   return {
     user: data?.user ?? null,
     mode: data?.user ? ("cookie" as AuthMode) : ("none" as AuthMode),
-    error
+    error,
   };
 }
 
-export async function getSupabaseAuthed(request: Request): Promise<{
+export async function getSupabaseAuthed(
+  request: Request
+): Promise<{
   supabase: SupabaseClient;
   user: Awaited<ReturnType<typeof requireUser>>["user"];
   mode: AuthMode;
 }> {
   const token = getBearerToken(request);
+
   if (token) {
     const supabase = createAnonClient(token);
-    const { data } = await supabase.auth.getUser(token);
+    const { data } = await supabase.auth.getUser();
     return { supabase, user: data?.user ?? null, mode: "bearer" };
   }
 
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = createCookieClient();
   const { data } = await supabase.auth.getUser();
+
   if (!data?.user) {
     return { supabase, user: null, mode: "none" };
   }
+
   return { supabase, user: data.user, mode: "cookie" };
 }
