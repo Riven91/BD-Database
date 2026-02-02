@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/supabase/requireUser";
 
-export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const runtime = "nodejs";
 
 function safeJsonParse(s: string) {
   try {
@@ -25,7 +25,7 @@ function serializeErr(err: any) {
     hint: err?.hint ?? null,
     code: err?.code ?? null,
     status: err?.status ?? null,
-    parsed
+    parsed,
   };
 }
 
@@ -82,15 +82,14 @@ function normalizeHeader(h: string) {
 }
 
 export async function POST(request: Request) {
-  // AUTH immer über requireUser (Cookie-first)
-  const { user, mode, error } = await requireUser(request);
+  // ✅ Auth via Cookie (genau wie /api/whoami)
+  const { user, error } = await requireUser(request);
+
   if (!user) {
     return NextResponse.json(
       {
-        ok: false,
         error: "not_authenticated",
-        mode: mode ?? null,
-        details: error?.message ?? null
+        details: error?.message ?? null,
       },
       { status: 401 }
     );
@@ -107,7 +106,7 @@ export async function POST(request: Request) {
 
     if (!file) {
       return NextResponse.json(
-        { ok: false, error: "preview_failed", where: "formData.file_missing", keys },
+        { error: "preview_failed", where: "formData.file_missing", keys },
         { status: 400 }
       );
     }
@@ -126,7 +125,12 @@ export async function POST(request: Request) {
 
     if (!isCsv) {
       return NextResponse.json(
-        { ok: false, error: "preview_failed", where: "file.type_unsupported", meta, keys },
+        {
+          error: "preview_failed",
+          where: "file.type_unsupported",
+          meta,
+          keys,
+        },
         { status: 400 }
       );
     }
@@ -138,7 +142,7 @@ export async function POST(request: Request) {
     const headerLine = firstNonEmptyLine(csvText);
     if (!headerLine) {
       return NextResponse.json(
-        { ok: false, error: "preview_failed", where: "csv.empty", meta, keys, headSnippet },
+        { error: "preview_failed", where: "csv.empty", meta, keys, headSnippet },
         { status: 400 }
       );
     }
@@ -150,19 +154,18 @@ export async function POST(request: Request) {
     if (!rawHeaders.length) {
       return NextResponse.json(
         {
-          ok: false,
           error: "preview_failed",
           where: "csv.headers_empty",
           meta,
           keys,
           headSnippet,
-          detectedDelimiter: delimiter
+          detectedDelimiter: delimiter,
         },
         { status: 400 }
       );
     }
 
-    const contacts: any[] = [];
+    const contacts: Array<Record<string, string>> = [];
     for (let i = 1; i < lines.length; i++) {
       const cols = splitCsvLine(lines[i], delimiter);
       const obj: Record<string, string> = { source_row: String(i + 1) };
@@ -176,22 +179,19 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      authenticated: true,
-      userId: user.id,
       format: "csv",
       meta,
       detectedDelimiter: delimiter,
       headers: rawHeaders,
       count: contacts.length,
       contacts,
-      preview: contacts
+      preview: contacts, // Alias fürs Frontend
     });
   } catch (err: any) {
     const payload = {
-      ok: false,
       error: "preview_failed",
       where: "route.catch",
-      ...serializeErr(err)
+      ...serializeErr(err),
     };
     console.error("IMPORT_PREVIEW_ERROR", payload);
     return NextResponse.json(payload, { status: 500 });
