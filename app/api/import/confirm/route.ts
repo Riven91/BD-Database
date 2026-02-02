@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { requireUser } from "@/lib/supabase/requireUser";
+import { getSupabaseServiceClient } from "@/lib/supabase/serviceServerClient";
 import type { NormalizedContact } from "@/lib/import-utils";
 
 export const dynamic = "force-dynamic";
@@ -8,26 +8,32 @@ export const revalidate = 0;
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-async function getLocations(supabase: SupabaseClient) {
+async function getLocations() {
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase
     .from("locations")
     .select("id, name, is_admin_only");
   if (error) throw new Error(error.message);
+
   const map = new Map<string, { id: string; is_admin_only: boolean }>();
-  (data ?? []).forEach((location) => {
-    map.set(location.name.toLowerCase(), {
+  (data ?? []).forEach((location: any) => {
+    map.set(String(location.name).toLowerCase(), {
       id: location.id,
-      is_admin_only: location.is_admin_only
+      is_admin_only: Boolean(location.is_admin_only)
     });
   });
   return map;
 }
 
-async function getLabels(supabase: SupabaseClient) {
+async function getLabels() {
+  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.from("labels").select("id, name");
   if (error) throw new Error(error.message);
+
   const map = new Map<string, string>();
-  (data ?? []).forEach((label) => map.set(label.name.toLowerCase(), label.id));
+  (data ?? []).forEach((label: any) =>
+    map.set(String(label.name).toLowerCase(), label.id)
+  );
   return map;
 }
 
@@ -43,34 +49,50 @@ function buildUpdatePayload(contact: NormalizedContact) {
 
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID?.() ?? String(Date.now());
-  const { supabase, user } = await getSupabaseAuthed(request);
+
+  // AUTH immer über requireUser (Cookie-first)
+  const { user, mode, error } = await requireUser(request);
   if (!user) {
-    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+    return NextResponse.json(
+      {
+        finished: false,
+        requestId,
+        error: "not_authenticated",
+        mode: mode ?? null,
+        details: error?.message ?? null
+      },
+      { status: 401 }
+    );
   }
+
   try {
-    const body = await request.json();
-    const contacts: NormalizedContact[] = body.contacts ?? [];
+    const body = await request.json().catch(() => null);
+    const contacts: NormalizedContact[] = body?.contacts ?? [];
+
     if (!contacts.length) {
-      const processed = 0;
-      const errorCount = 0;
       return NextResponse.json({
         finished: true,
         requestId,
         created: 0,
         updated: 0,
         skipped: 0,
-        processed,
-        errorCount,
+        processed: 0,
+        errorCount: 0,
         errors: []
       });
     }
 
-    const locationMap = await getLocations(supabase);
-    const labelMap = await getLabels(supabase);
+    // Service client für stabile Writes (RLS-unabhängig)
+    const supabase = getSupabaseServiceClient();
+
+    const locationMap = await getLocations();
+    const labelMap = await getLabels();
+
     let created = 0;
     let updated = 0;
     let skipped = 0;
     let processed = 0;
+
     const errors: { row?: number; phone?: string; message: string }[] = [];
 
     const logProgress = () => {
@@ -88,25 +110,30 @@ export async function POST(request: Request) {
 
     for (const contact of contacts) {
       processed += 1;
+
       const row = contact.source_row;
       const locationName = contact.location_name?.trim() || "Unbekannt";
       const locationKey = locationName.toLowerCase();
+
       const existingLocation = locationMap.get(locationKey);
+
       if (!existingLocation) {
-        const { data: newLocation, error } = await supabase
+        const { data: newLocation, error: locErr } = await supabase
           .from("locations")
           .insert({ name: locationName, is_admin_only: locationName === "Unbekannt" })
           .select("id, name, is_admin_only")
           .single();
-        if (error) {
-          errors.push({ row, phone: contact.phone_e164, message: error.message });
+
+        if (locErr || !newLocation) {
+          errors.push({ row, phone: contact.phone_e164, message: locErr?.message ?? "Standort insert failed" });
           skipped += 1;
           logProgress();
           continue;
         }
-        locationMap.set(newLocation.name.toLowerCase(), {
+
+        locationMap.set(String(newLocation.name).toLowerCase(), {
           id: newLocation.id,
-          is_admin_only: newLocation.is_admin_only
+          is_admin_only: Boolean(newLocation.is_admin_only)
         });
       }
 
@@ -145,30 +172,30 @@ export async function POST(request: Request) {
         .select("id, phone_e164")
         .single();
 
-      if (upsertError) {
-        errors.push({ row, phone: contact.phone_e164, message: upsertError.message });
+      if (upsertError || !upserted) {
+        errors.push({ row, phone: contact.phone_e164, message: upsertError?.message ?? "Contact upsert failed" });
         skipped += 1;
         logProgress();
         continue;
       }
 
-      if (existing) {
-        updated += 1;
-      } else {
-        created += 1;
-      }
+      if (existing) updated += 1;
+      else created += 1;
 
-      const contactId = upserted?.id;
-      if (contact.labels?.length && contactId) {
+      const contactId = upserted.id;
+
+      if (contact.labels?.length) {
         for (const label of contact.labels) {
           const normalized = label.toLowerCase();
           let labelId = labelMap.get(normalized);
+
           if (!labelId) {
             const { data: createdLabel, error: labelError } = await supabase
               .from("labels")
               .upsert({ name: label }, { onConflict: "name" })
               .select("id, name")
               .single();
+
             if (labelError || !createdLabel) {
               errors.push({
                 row,
@@ -177,19 +204,20 @@ export async function POST(request: Request) {
               });
               continue;
             }
+
             labelId = createdLabel.id;
-            labelMap.set(createdLabel.name.toLowerCase(), createdLabel.id);
+            labelMap.set(String(createdLabel.name).toLowerCase(), createdLabel.id);
           }
-          const { error: linkError } = await supabase.from("contact_labels").upsert(
-            { contact_id: contactId, label_id: labelId },
-            { onConflict: "contact_id,label_id" }
-          );
+
+          const { error: linkError } = await supabase
+            .from("contact_labels")
+            .upsert(
+              { contact_id: contactId, label_id: labelId },
+              { onConflict: "contact_id,label_id" }
+            );
+
           if (linkError) {
-            errors.push({
-              row,
-              phone: contact.phone_e164,
-              message: linkError.message
-            });
+            errors.push({ row, phone: contact.phone_e164, message: linkError.message });
           }
         }
       }
@@ -198,6 +226,7 @@ export async function POST(request: Request) {
     }
 
     const errorCount = errors.length;
+
     return NextResponse.json({
       finished: true,
       requestId,
@@ -208,16 +237,14 @@ export async function POST(request: Request) {
       errorCount,
       errors: errors.slice(0, 50)
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Import fehlgeschlagen";
-    const parsed = error instanceof Error ? undefined : error;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Import fehlgeschlagen";
     return NextResponse.json(
       {
         finished: false,
         requestId,
         error: "import_failed",
-        message,
-        ...(parsed === undefined ? {} : { parsed })
+        message
       },
       { status: 500 }
     );
