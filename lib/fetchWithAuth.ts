@@ -6,12 +6,27 @@ export async function fetchWithAuth(
   input: RequestInfo,
   init: RequestInit = {}
 ) {
-  const supabase = getPlainSupabaseBrowser();
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  // Cookie-Auth ist bei dir die Wahrheit.
+  // Bearer ist optional (Preview/Edge/Special cases), aber nicht zwingend.
+  let token: string | undefined;
+
+  try {
+    const supabase = getPlainSupabaseBrowser();
+    const { data } = await supabase.auth.getSession();
+    token = data.session?.access_token;
+  } catch {
+    // Wenn supabase/session mal knallt: trotzdem Request nicht zerstören.
+    token = undefined;
+  }
 
   const headers = new Headers(init.headers || {});
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  // Optionaler Bearer (falls vorhanden)
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  // Content-Type nur setzen, wenn Body kein FormData ist
   if (
     !headers.has("Content-Type") &&
     init.body &&
@@ -20,5 +35,10 @@ export async function fetchWithAuth(
     headers.set("Content-Type", "application/json");
   }
 
-  return fetch(input, { ...init, headers });
+  // WICHTIG: Cookies mitsenden, sonst sieht der Server deine Supabase-Cookies nicht.
+  return fetch(input, {
+    ...init,
+    headers,
+    credentials: "include",
+  });
 }
