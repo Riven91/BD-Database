@@ -44,6 +44,7 @@ type Contact = {
   first_name: string | null;
   last_name: string | null;
   phone_e164: string | null;
+  notes?: string | null;
   location_id: string | null;
   created_at: string;
   status: string;
@@ -212,6 +213,14 @@ export default function DashboardPage() {
   const [labelSearch, setLabelSearch] = useState("");
 
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [formName, setFormName] = useState("");
+  const [formPhone, setFormPhone] = useState("");
+  const [formLocationId, setFormLocationId] = useState("");
+  const [formNotes, setFormNotes] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createName, setCreateName] = useState("");
@@ -344,6 +353,22 @@ export default function DashboardPage() {
     }
   }, [createLocationId, locations]);
 
+  useEffect(() => {
+    if (!expandedId) {
+      setIsEditing(false);
+      setEditError(null);
+      return;
+    }
+    if (isEditing) return;
+    const active = contacts.find((contact) => contact.id === expandedId);
+    if (!active) return;
+    setFormName(active.name ?? "");
+    setFormPhone(active.phone_e164 ?? "");
+    setFormLocationId(active.location_id ?? active.location?.id ?? "");
+    setFormNotes(active.notes ?? "");
+    setEditError(null);
+  }, [contacts, expandedId, isEditing]);
+
   const filteredContacts = useMemo(() => {
     if (!labelFilters.length) return contacts;
     return contacts.filter((contact) =>
@@ -474,6 +499,92 @@ export default function DashboardPage() {
       );
     } finally {
       setCreateLoading(false);
+    }
+  };
+
+  const handleEditContact = async (contact: Contact) => {
+    setEditSaving(true);
+    setEditError(null);
+
+    const payload = {
+      name: formName.trim() || null,
+      phone_e164: formPhone.trim(),
+      location_id: formLocationId || null,
+      notes: formNotes.trim() || null
+    };
+
+    try {
+      const response = await fetchWithAuth(`/api/contacts/${contact.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const text = await response.text();
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {}
+
+      if (!response.ok) {
+        if (response.status === 409 && parsed?.error === "phone_exists") {
+          setEditError("Diese Telefonnummer existiert bereits.");
+        } else {
+          setEditError(
+            typeof parsed?.error === "string"
+              ? parsed.error
+              : JSON.stringify(parsed ?? { raw: text, status: response.status }, null, 2)
+          );
+        }
+        return;
+      }
+
+      const updatedLocation =
+        locations.find((location) => location.id === payload.location_id) ?? null;
+
+      setContacts((prev) =>
+        prev.map((item) =>
+          item.id === contact.id
+            ? {
+                ...item,
+                name: payload.name,
+                phone_e164: payload.phone_e164,
+                location_id: payload.location_id,
+                location: payload.location_id ? updatedLocation : null,
+                notes: payload.notes
+              }
+            : item
+        )
+      );
+      setIsEditing(false);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDeleteContact = async (contact: Contact) => {
+    const confirmed = window.confirm(
+      "Kontakt wirklich löschen? Dies kann nicht rückgängig gemacht werden."
+    );
+    if (!confirmed) return;
+    setDeleteSaving(true);
+    setEditError(null);
+
+    try {
+      const response = await fetchWithAuth(`/api/contacts/${contact.id}`, {
+        method: "DELETE"
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        setEditError(text || "Löschen fehlgeschlagen.");
+        return;
+      }
+
+      setContacts((prev) => prev.filter((item) => item.id !== contact.id));
+      setExpandedId(null);
+    } finally {
+      setDeleteSaving(false);
     }
   };
 
@@ -708,7 +819,11 @@ export default function DashboardPage() {
               <div key={contact.id} className="border-b border-base-800">
                 <button
                   type="button"
-                  onClick={() => setExpandedId((prev) => (prev === contact.id ? null : contact.id))}
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditError(null);
+                    setExpandedId((prev) => (prev === contact.id ? null : contact.id));
+                  }}
                   className="grid w-full grid-cols-5 gap-4 px-4 py-3 text-left text-sm hover:bg-base-900/60"
                 >
                   <span>{displayName}</span>
@@ -728,6 +843,44 @@ export default function DashboardPage() {
                   <div className="border-t border-base-800 bg-base-900/40 px-4 py-4">
                     <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
                       <div className="space-y-3">
+                        {isEditing ? (
+                          <>
+                            <div>
+                              <label className="text-xs uppercase text-text-muted">Name</label>
+                              <Input
+                                placeholder="Kontaktname"
+                                value={formName}
+                                onChange={(event) => setFormName(event.target.value)}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-xs uppercase text-text-muted">Telefon</label>
+                              <Input
+                                placeholder="+49..."
+                                value={formPhone}
+                                onChange={(event) => setFormPhone(event.target.value)}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-xs uppercase text-text-muted">Standort</label>
+                              <select
+                                className="w-full rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
+                                value={formLocationId}
+                                onChange={(event) => setFormLocationId(event.target.value)}
+                              >
+                                <option value="">Kein Standort</option>
+                                {locations.map((location) => (
+                                  <option key={location.id} value={location.id}>
+                                    {location.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </>
+                        ) : null}
+
                         <label className="text-xs uppercase text-text-muted">Status</label>
                         <select
                           className="w-full rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
@@ -741,6 +894,58 @@ export default function DashboardPage() {
                           ))}
                         </select>
 
+                        <div className="flex flex-wrap gap-2">
+                          {!isEditing ? (
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setIsEditing(true);
+                                setEditError(null);
+                                setFormName(contact.name ?? "");
+                                setFormPhone(contact.phone_e164 ?? "");
+                                setFormLocationId(contact.location_id ?? contact.location?.id ?? "");
+                                setFormNotes(contact.notes ?? "");
+                              }}
+                            >
+                              Bearbeiten
+                            </Button>
+                          ) : (
+                            <>
+                              <Button
+                                onClick={() => handleEditContact(contact)}
+                                disabled={editSaving}
+                              >
+                                Speichern
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setIsEditing(false);
+                                  setEditError(null);
+                                  setFormName(contact.name ?? "");
+                                  setFormPhone(contact.phone_e164 ?? "");
+                                  setFormLocationId(
+                                    contact.location_id ?? contact.location?.id ?? ""
+                                  );
+                                  setFormNotes(contact.notes ?? "");
+                                }}
+                                disabled={editSaving}
+                              >
+                                Abbrechen
+                              </Button>
+                            </>
+                          )}
+
+                          <Button
+                            variant="outline"
+                            className="border-red-600 text-red-400 hover:bg-red-950"
+                            onClick={() => handleDeleteContact(contact)}
+                            disabled={deleteSaving}
+                          >
+                            Kontakt löschen
+                          </Button>
+                        </div>
+
                         <Button
                           variant="outline"
                           onClick={() => navigator.clipboard.writeText(contact.phone_e164 ?? "")}
@@ -750,6 +955,21 @@ export default function DashboardPage() {
 
                         {savingId === contact.id ? (
                           <p className="text-xs text-text-muted">Speichern...</p>
+                        ) : null}
+
+                        {editSaving ? (
+                          <p className="text-xs text-text-muted">Bearbeitung speichern...</p>
+                        ) : null}
+
+                        {editError ? (
+                          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+                            <div className="font-medium text-amber-200">
+                              Fehler beim Speichern
+                            </div>
+                            <pre className="mt-2 whitespace-pre-wrap text-xs text-amber-100">
+                              {editError}
+                            </pre>
+                          </div>
                         ) : null}
                       </div>
 
