@@ -167,7 +167,11 @@ export default function ContactDetailPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Kontakt</h2>
               {!isEditing ? (
-                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                <Button
+                  variant="outline"
+                  className="h-8 px-3 text-sm"
+                  onClick={() => setIsEditing(true)}
+                >
                   Bearbeiten
                 </Button>
               ) : null}
