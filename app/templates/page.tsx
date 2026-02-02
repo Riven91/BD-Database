@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button, Input, Textarea } from "@/components/ui";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
@@ -18,6 +18,9 @@ export default function TemplatesPage() {
   const [body, setBody] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [expandedTemplateId, setExpandedTemplateId] = useState<string | null>(null);
+  const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadTemplates = async () => {
     const response = await fetchWithAuth("/api/templates");
@@ -28,6 +31,11 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     loadTemplates();
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
   }, []);
 
   const handleSubmit = async () => {
@@ -100,6 +108,23 @@ export default function TemplatesPage() {
     setBody(template.body);
   };
 
+  const handleCopy = async (template: Template) => {
+    try {
+      await navigator.clipboard.writeText(template.body);
+      setCopiedTemplateId(template.id);
+      setErrorMessage("");
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopiedTemplateId(null);
+      }, 1500);
+    } catch (error) {
+      console.error("Template copy failed", error);
+      setErrorMessage("Copy fehlgeschlagen. Bitte erneut versuchen.");
+    }
+  };
+
   return (
     <AppShell title="Templates" subtitle="Copy/Paste Vorlagen">
       <section className="mb-6 space-y-3 rounded-lg border border-base-800 bg-base-850 p-4">
@@ -139,53 +164,80 @@ export default function TemplatesPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Vorhandene Templates</h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="text-xs uppercase text-text-muted">
-              <tr>
-                <th className="px-3 py-2">Titel</th>
-                <th className="px-3 py-2">Vorschau</th>
-                <th className="px-3 py-2">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {templates.map((template) => (
-                <tr
-                  key={template.id}
-                  className="border-b border-base-800/60 align-top"
-                >
-                  <td className="px-3 py-2 font-medium">{template.title}</td>
-                  <td className="px-3 py-2 text-text-muted">
-                    {template.body.slice(0, 120)}
-                    {template.body.length > 120 ? "…" : ""}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="secondary" onClick={() => handleSelect(template)}>
-                        Bearbeiten
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => toggleArchive(template.id, !template.is_archived)}
-                      >
-                        {template.is_archived ? "Reaktivieren" : "Archivieren"}
-                      </Button>
-                      <Button variant="outline" onClick={() => handleDelete(template.id)}>
-                        Löschen
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {templates.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="px-3 py-6 text-center text-text-muted">
-                    Noch keine Templates gespeichert.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {templates.map((template) => {
+            const isExpanded = expandedTemplateId === template.id;
+            const isCopied = copiedTemplateId === template.id;
+            return (
+              <div
+                key={template.id}
+                className="rounded-lg border border-base-800 bg-base-850 p-4"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-base font-semibold">{template.title}</div>
+                    {template.is_archived ? (
+                      <div className="mt-1 text-xs text-text-muted">Archiviert</div>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      className="min-h-[40px]"
+                      onClick={() =>
+                        setExpandedTemplateId((current) =>
+                          current === template.id ? null : template.id
+                        )
+                      }
+                    >
+                      <span className="mr-1 text-base" aria-hidden="true">
+                        {isExpanded ? "▴" : "▾"}
+                      </span>
+                      {isExpanded ? "Zuklappen" : "Aufklappen"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="min-h-[40px]"
+                      onClick={() => handleCopy(template)}
+                    >
+                      {isCopied ? "Copied" : "Copy"}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="min-h-[40px]"
+                      onClick={() => handleSelect(template)}
+                    >
+                      Bearbeiten
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="min-h-[40px]"
+                      onClick={() => toggleArchive(template.id, !template.is_archived)}
+                    >
+                      {template.is_archived ? "Reaktivieren" : "Archivieren"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="min-h-[40px]"
+                      onClick={() => handleDelete(template.id)}
+                    >
+                      Löschen
+                    </Button>
+                  </div>
+                </div>
+                {isExpanded ? (
+                  <div className="mt-3 rounded-md border border-base-800 bg-base-900/60 p-3 text-sm text-text-muted whitespace-pre-wrap">
+                    {template.body}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+          {templates.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-base-800 p-6 text-center text-text-muted">
+              Noch keine Templates gespeichert.
+            </div>
+          ) : null}
         </div>
       </section>
     </AppShell>
