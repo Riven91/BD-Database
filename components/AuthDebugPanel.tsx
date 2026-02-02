@@ -12,10 +12,12 @@ type SessionInfo = {
   expiresAt: number | null;
 };
 
-type WhoamiInfo = {
-  status: number;
-  body: string;
-} | null;
+type WhoamiInfo =
+  | {
+      status: number;
+      body: string;
+    }
+  | null;
 
 export default function AuthDebugPanel() {
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
@@ -28,6 +30,7 @@ export default function AuthDebugPanel() {
       const supabase = getPlainSupabaseBrowser();
       const { data, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
+
       const session = data.session;
       setSessionInfo({
         hasSession: Boolean(session),
@@ -47,6 +50,7 @@ export default function AuthDebugPanel() {
     setError(null);
     setWhoami(null);
     try {
+      // fetchWithAuth kann Bearer ODER Cookie – entscheidend ist: /api/whoami zeigt Wahrheit
       const response = await fetchWithAuth("/api/whoami");
       const text = await response.text();
       setWhoami({ status: response.status, body: text });
@@ -57,6 +61,7 @@ export default function AuthDebugPanel() {
 
   useEffect(() => {
     loadSession();
+    runWhoami();
   }, []);
 
   return (
@@ -67,27 +72,39 @@ export default function AuthDebugPanel() {
           <button
             className="rounded border border-green-700 px-2 py-1 hover:bg-green-950"
             onClick={loadSession}
+            type="button"
           >
-            Refresh Session
+            Refresh Supabase Session (Browser)
           </button>
           <button
             className="rounded border border-green-700 px-2 py-1 hover:bg-green-950"
             onClick={runWhoami}
+            type="button"
           >
-            Call /api/whoami (Bearer)
+            Call /api/whoami (Cookie/Bearer)
           </button>
         </div>
       </div>
 
       {error ? <div className="mt-2 text-red-300">Error: {error}</div> : null}
 
+      <div className="mt-2 text-xs text-green-300">
+        Hinweis: Bei Cookie-Auth kann der Supabase-Browser-Session-State leer sein – entscheidend ist /api/whoami.
+      </div>
+
       <div className="mt-2 text-green-100">
+        <div className="mb-1 text-xs uppercase text-green-300">
+          Supabase Browser Session
+        </div>
         <pre className="whitespace-pre-wrap">
           {JSON.stringify(sessionInfo, null, 2)}
         </pre>
       </div>
 
       <div className="mt-2 text-green-100">
+        <div className="mb-1 text-xs uppercase text-green-300">
+          /api/whoami response
+        </div>
         <pre className="whitespace-pre-wrap">
           {JSON.stringify(whoami, null, 2)}
         </pre>
