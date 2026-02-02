@@ -138,6 +138,31 @@ function SortableLabel({
   );
 }
 
+function normalizeStats(input: any): ContactStats | null {
+  // Unterstützt beide Shapes: {total,...} ODER {stats:{total,...}}
+  const raw = input?.stats && typeof input.stats === "object" ? input.stats : input;
+  if (!raw || typeof raw !== "object") return null;
+
+  const byLocation = Array.isArray(raw.byLocation) ? raw.byLocation : [];
+  return {
+    total: typeof raw.total === "number" ? raw.total : Number(raw.total ?? 0) || 0,
+    missingName:
+      typeof raw.missingName === "number"
+        ? raw.missingName
+        : Number(raw.missingName ?? 0) || 0,
+    missingPhone:
+      typeof raw.missingPhone === "number"
+        ? raw.missingPhone
+        : Number(raw.missingPhone ?? 0) || 0,
+    byLocation: byLocation
+      .filter(Boolean)
+      .map((x: any) => ({
+        name: typeof x?.name === "string" ? x.name : "—",
+        count: typeof x?.count === "number" ? x.count : Number(x?.count ?? 0) || 0
+      }))
+  };
+}
+
 export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -166,7 +191,9 @@ export default function DashboardPage() {
   const [createNote, setCreateNote] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
 
   const loadContacts = async (overridePageIndex?: number) => {
     setLoading(true);
@@ -229,16 +256,27 @@ export default function DashboardPage() {
       try {
         parsed = JSON.parse(text);
       } catch {}
+
       if (!response.ok) {
         console.error("STATS_FETCH_ERROR_RAW", { status: response.status, text });
         setStatsError(JSON.stringify(parsed ?? { raw: text }, null, 2));
+        setStats(null);
         return;
       }
-      const payload = parsed ?? null;
-      setStats(payload ?? null);
+
+      const normalized = normalizeStats(parsed);
+      if (!normalized) {
+        // ABSICHERUNG: niemals "irgendwas" setzen, sonst knallt byLocation.length
+        setStats(null);
+        setStatsError("Stats payload invalid (missing fields).");
+        return;
+      }
+
+      setStats(normalized);
       setStatsError(null);
     } catch (error) {
       console.error("DASHBOARD_STATS_ERROR", error);
+      setStats(null);
       setStatsError("Failed to load stats.");
     }
   };
@@ -392,7 +430,11 @@ export default function DashboardPage() {
       await loadStats();
     } catch (error) {
       setCreateError(
-        JSON.stringify({ error: error instanceof Error ? error.message : error }, null, 2)
+        JSON.stringify(
+          { error: error instanceof Error ? error.message : error },
+          null,
+          2
+        )
       );
     } finally {
       setCreateLoading(false);
@@ -408,6 +450,7 @@ export default function DashboardPage() {
       <div className="mb-6">
         <AuthDebugPanel />
       </div>
+
       <section className="mb-6 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
         <div className="text-xs uppercase text-text-muted">Stats</div>
         {statsError ? (
@@ -425,21 +468,27 @@ export default function DashboardPage() {
               Gesamt: <span className="text-text-primary">{stats.total}</span>
             </span>
             <span>
-              Gefiltert: <span className="text-text-primary">{filteredContacts.length}</span>
-              <span className="text-text-muted"> / {contacts.length} geladen</span>
+              Gefiltert:{" "}
+              <span className="text-text-primary">
+                {filteredContacts.length}
+              </span>
+              <span className="text-text-muted">
+                {" "}
+                / {contacts.length} geladen
+              </span>
             </span>
             <span>
-              Fehlender Name: {" "}
+              Fehlender Name:{" "}
               <span className="text-text-primary">{stats.missingName}</span>
             </span>
             <span>
-              Fehlende Nummer: {" "}
+              Fehlende Nummer:{" "}
               <span className="text-text-primary">{stats.missingPhone}</span>
             </span>
             <span className="flex flex-wrap gap-2">
               Standorte:
-              {stats.byLocation.length ? (
-                stats.byLocation.map((location) => (
+              {(stats.byLocation ?? []).length ? (
+                (stats.byLocation ?? []).map((location) => (
                   <span key={location.name} className="text-text-primary">
                     {location.name} ({location.count})
                   </span>
@@ -453,6 +502,7 @@ export default function DashboardPage() {
           <div className="mt-2 text-xs text-text-muted">Lade Statistiken...</div>
         )}
       </section>
+
       <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
         <div className="text-text-muted">
           Manuelle Kontakte hinzufügen und verwalten.
@@ -466,6 +516,7 @@ export default function DashboardPage() {
           Kontakt hinzufügen
         </Button>
       </section>
+
       <section className="mb-6 grid gap-4 rounded-lg border border-base-800 bg-base-850 p-4 md:grid-cols-6">
         <Input
           placeholder="Suche nach Name oder Telefon"
@@ -653,6 +704,7 @@ export default function DashboardPage() {
                     )}
                   </span>
                 </button>
+
                 {expandedId === contact.id ? (
                   <div className="border-t border-base-800 bg-base-900/40 px-4 py-4">
                     <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
@@ -685,6 +737,7 @@ export default function DashboardPage() {
                           <p className="text-xs text-text-muted">Speichern...</p>
                         ) : null}
                       </div>
+
                       <div className="space-y-4">
                         <div>
                           <label className="text-xs uppercase text-text-muted">
@@ -696,6 +749,7 @@ export default function DashboardPage() {
                             onChange={(event) => setLabelSearch(event.target.value)}
                           />
                         </div>
+
                         <DndContext
                           sensors={sensors}
                           collisionDetection={closestCenter}
@@ -730,6 +784,7 @@ export default function DashboardPage() {
                                 </div>
                               </SortableContext>
                             </DroppableZone>
+
                             <DroppableZone id="assigned">
                               <div className="mb-2 text-xs uppercase text-text-muted">
                                 Labels dieses Kontakts
@@ -759,6 +814,7 @@ export default function DashboardPage() {
                               </SortableContext>
                             </DroppableZone>
                           </div>
+
                           <DroppableZone
                             id="remove"
                             className="mt-4 border-dashed text-xs text-text-muted"
@@ -775,6 +831,7 @@ export default function DashboardPage() {
           })
         )}
       </section>
+
       {showCreateModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-2xl rounded-lg border border-base-800 bg-base-850 p-6 shadow-xl">
