@@ -6,14 +6,33 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const runtime = "nodejs";
 
-function json(data: any, status = 200) {
+function json(data: any) {
   return new NextResponse(JSON.stringify(data), {
-    status,
+    status: 200, // IMMER 200, damit Client nie crasht
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
     },
   });
+}
+
+function stableResponse(base?: Partial<any>) {
+  // IMMER gleiche Struktur, egal ob Fehler oder Erfolg
+  return {
+    ok: false,
+    authenticated: false,
+    mode: null,
+    user: { id: null, email: null },
+    stats: {
+      totalContacts: 0,
+      totalLabels: 0,
+      totalLocations: 0,
+      missingName: { sampleSize: 0, missingInSample: 0 },
+    },
+    error: null,
+    details: null,
+    ...base,
+  };
 }
 
 export async function GET(request: Request) {
@@ -22,78 +41,91 @@ export async function GET(request: Request) {
 
     if (!user) {
       return json(
-        {
-          ok: false,
+        stableResponse({
+          ok: true, // Route antwortet technisch OK, Auth ist nur false
+          authenticated: false,
+          mode: mode ?? null,
           error: "not_authenticated",
-          mode,
           details: error?.message ?? null,
-        },
-        401
+        })
       );
     }
 
-    // Service Client: zählt unabhängig von RLS (dafür ist er da)
-    const supabase = getSupabaseServiceClient();
-
-    const contactsCountRes = await supabase
-      .from("contacts")
-      .select("id", { count: "exact", head: true });
-
-    if (contactsCountRes.error) {
+    let supabase: any;
+    try {
+      // Kann werfen, wenn SUPABASE_SERVICE_ROLE_KEY fehlt
+      supabase = getSupabaseServiceClient();
+    } catch (e: any) {
       return json(
-        {
-          ok: false,
+        stableResponse({
+          ok: true,
+          authenticated: true,
+          mode: mode ?? null,
+          user: { id: user.id ?? null, email: user.email ?? null },
+          error: "service_client_unavailable",
+          details: e?.message ?? "SUPABASE_SERVICE_ROLE_KEY is missing",
+        })
+      );
+    }
+
+    const [contactsCountRes, labelsCountRes, locationsCountRes, sampleRes] =
+      await Promise.all([
+        supabase.from("contacts").select("id", { count: "exact", head: true }),
+        supabase.from("labels").select("id", { count: "exact", head: true }),
+        supabase.from("locations").select("id", { count: "exact", head: true }),
+        supabase.from("contacts").select("id,name").limit(2000),
+      ]);
+
+    // Wenn irgendein Query fehlschlägt: trotzdem stabile Struktur zurückgeben
+    if (contactsCountRes?.error) {
+      return json(
+        stableResponse({
+          ok: true,
+          authenticated: true,
+          mode: mode ?? null,
+          user: { id: user.id ?? null, email: user.email ?? null },
           error: "contacts_stats_failed",
           details: contactsCountRes.error.message,
-        },
-        500
+        })
       );
     }
 
-    const labelsCountRes = await supabase
-      .from("labels")
-      .select("id", { count: "exact", head: true });
-
-    if (labelsCountRes.error) {
+    if (labelsCountRes?.error) {
       return json(
-        {
-          ok: false,
+        stableResponse({
+          ok: true,
+          authenticated: true,
+          mode: mode ?? null,
+          user: { id: user.id ?? null, email: user.email ?? null },
           error: "labels_stats_failed",
           details: labelsCountRes.error.message,
-        },
-        500
+        })
       );
     }
 
-    const locationsCountRes = await supabase
-      .from("locations")
-      .select("id", { count: "exact", head: true });
-
-    if (locationsCountRes.error) {
+    if (locationsCountRes?.error) {
       return json(
-        {
-          ok: false,
+        stableResponse({
+          ok: true,
+          authenticated: true,
+          mode: mode ?? null,
+          user: { id: user.id ?? null, email: user.email ?? null },
           error: "locations_stats_failed",
           details: locationsCountRes.error.message,
-        },
-        500
+        })
       );
     }
 
-    // Missing-name Sample (robust, keine komplizierten OR-Filter)
-    const sampleRes = await supabase
-      .from("contacts")
-      .select("id,name")
-      .limit(2000);
-
-    if (sampleRes.error) {
+    if (sampleRes?.error) {
       return json(
-        {
-          ok: false,
+        stableResponse({
+          ok: true,
+          authenticated: true,
+          mode: mode ?? null,
+          user: { id: user.id ?? null, email: user.email ?? null },
           error: "missing_name_sample_failed",
           details: sampleRes.error.message,
-        },
-        500
+        })
       );
     }
 
@@ -108,11 +140,8 @@ export async function GET(request: Request) {
     return json({
       ok: true,
       authenticated: true,
-      mode,
-      user: {
-        id: user.id,
-        email: user.email ?? null,
-      },
+      mode: mode ?? null,
+      user: { id: user.id ?? null, email: user.email ?? null },
       stats: {
         totalContacts: contactsCountRes.count ?? 0,
         totalLabels: labelsCountRes.count ?? 0,
@@ -122,16 +151,16 @@ export async function GET(request: Request) {
           missingInSample,
         },
       },
+      error: null,
+      details: null,
     });
   } catch (e: any) {
     return json(
-      {
-        ok: false,
+      stableResponse({
+        ok: true,
         error: "server_error",
         details: e?.message ?? "unknown",
-      },
-      500
+      })
     );
   }
 }
-
