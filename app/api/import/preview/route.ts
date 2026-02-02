@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAuthed } from "@/lib/supabase/requireUser";
+import { requireUser } from "@/lib/supabase/requireUser";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,9 +82,18 @@ function normalizeHeader(h: string) {
 }
 
 export async function POST(request: Request) {
-  const { user } = await getSupabaseAuthed(request);
+  // AUTH immer über requireUser (Cookie-first)
+  const { user, mode, error } = await requireUser(request);
   if (!user) {
-    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "not_authenticated",
+        mode: mode ?? null,
+        details: error?.message ?? null
+      },
+      { status: 401 }
+    );
   }
 
   try {
@@ -98,7 +107,7 @@ export async function POST(request: Request) {
 
     if (!file) {
       return NextResponse.json(
-        { error: "preview_failed", where: "formData.file_missing", keys },
+        { ok: false, error: "preview_failed", where: "formData.file_missing", keys },
         { status: 400 }
       );
     }
@@ -107,19 +116,17 @@ export async function POST(request: Request) {
     const type = String(file?.type ?? "");
     const meta = { name, type, size: Number(file?.size ?? 0) };
 
-    // CSV only (to guarantee build stability)
+    // CSV only
     const nameLower = name.toLowerCase();
     const isCsv =
-      nameLower.endsWith(".csv") || type.includes("csv") || type.includes("text") || type === "";
+      nameLower.endsWith(".csv") ||
+      type.includes("csv") ||
+      type.includes("text") ||
+      type === "";
 
     if (!isCsv) {
       return NextResponse.json(
-        {
-          error: "preview_failed",
-          where: "file.type_unsupported",
-          meta,
-          keys
-        },
+        { ok: false, error: "preview_failed", where: "file.type_unsupported", meta, keys },
         { status: 400 }
       );
     }
@@ -131,7 +138,7 @@ export async function POST(request: Request) {
     const headerLine = firstNonEmptyLine(csvText);
     if (!headerLine) {
       return NextResponse.json(
-        { error: "preview_failed", where: "csv.empty", meta, keys, headSnippet },
+        { ok: false, error: "preview_failed", where: "csv.empty", meta, keys, headSnippet },
         { status: 400 }
       );
     }
@@ -143,6 +150,7 @@ export async function POST(request: Request) {
     if (!rawHeaders.length) {
       return NextResponse.json(
         {
+          ok: false,
           error: "preview_failed",
           where: "csv.headers_empty",
           meta,
@@ -154,7 +162,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const contacts = [];
+    const contacts: any[] = [];
     for (let i = 1; i < lines.length; i++) {
       const cols = splitCsvLine(lines[i], delimiter);
       const obj: Record<string, string> = { source_row: String(i + 1) };
@@ -168,16 +176,19 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
+      authenticated: true,
+      userId: user.id,
       format: "csv",
       meta,
       detectedDelimiter: delimiter,
       headers: rawHeaders,
       count: contacts.length,
       contacts,
-      preview: contacts // Alias für Frontend
+      preview: contacts
     });
   } catch (err: any) {
     const payload = {
+      ok: false,
       error: "preview_failed",
       where: "route.catch",
       ...serializeErr(err)
