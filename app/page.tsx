@@ -22,7 +22,6 @@ import AuthDebugPanel from "@/components/AuthDebugPanel";
 import LogoutButton from "@/components/LogoutButton";
 import { Button, Chip, Input, Textarea } from "@/components/ui";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import { supabaseBrowser } from "@/lib/supabase/browserClient";
 
 const statusOptions = [
   { value: "neu", label: "Neu" },
@@ -142,9 +141,6 @@ function SortableLabel({
 }
 
 function normalizeStats(input: any): ContactStats | null {
-  // Unterstützt beide Shapes:
-  // A) { total, missingName, missingPhone, byLocation }
-  // B) { stats: { totalContacts, missingName:{...}, missingPhone:{...}, byLocation } }
   const raw =
     input?.stats && typeof input.stats === "object" ? input.stats : input;
 
@@ -155,7 +151,6 @@ function normalizeStats(input: any): ContactStats | null {
       ? raw.total
       : Number(raw.totalContacts ?? raw.total ?? 0) || 0;
 
-  // missingName kann entweder Zahl sein (A) oder Objekt (B)
   const missingName =
     typeof raw.missingName === "number"
       ? raw.missingName
@@ -179,7 +174,6 @@ function normalizeStats(input: any): ContactStats | null {
         }))
     : [];
 
-  // TS strict Fix: a/b typisieren
   byLocationArr.sort(
     (a: { name: string; count: number }, b: { name: string; count: number }) =>
       b.count - a.count
@@ -236,55 +230,45 @@ export default function DashboardPage() {
     setLoading(true);
     setErrorText(null);
 
-    const supabase = supabaseBrowser();
-
-    let query = supabase
-      .from("contacts")
-      .select(
-        "id, phone_e164, location_id, created_at, name, first_name, last_name, status, location:locations(id,name), labels:contact_labels(labels(id,name,sort_order,is_archived))",
-        { count: "exact" }
-      );
-
-    if (selectedLocationId && selectedLocationId !== "all") {
-      query = query.eq("location_id", selectedLocationId);
-    }
-
-    if (search.trim().length) {
-      const s = search.trim();
-      query = query.or(
-        `phone_e164.ilike.%${s}%,name.ilike.%${s}%,first_name.ilike.%${s}%,last_name.ilike.%${s}%`
-      );
-    }
-
-    if (statusFilter !== "all") {
-      query = query.eq("status", statusFilter);
-    }
-
-    query = query.order(sortKey, { ascending: sortDir === "asc" });
-
     const activePageIndex = overridePageIndex ?? pageIndex;
-    const from = activePageIndex * pageSize;
-    const to = from + pageSize - 1;
-    query = query.range(from, to);
+
+    const qs = new URLSearchParams({
+      pageIndex: String(activePageIndex),
+      pageSize: String(pageSize),
+      search: search.trim(),
+      status: statusFilter,
+      locationId: selectedLocationId,
+      sortKey,
+      sortDir
+    });
 
     try {
-      const { data, error, count } = await query;
+      const response = await fetchWithAuth(`/api/contacts/list?${qs.toString()}`);
+      const text = await response.text();
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {}
 
-      if (error) {
-        console.error("DASHBOARD_CONTACTS_ERROR", error);
-        setErrorText(`${error.message} (${error.code ?? ""})`);
+      if (!response.ok) {
+        setErrorText(
+          JSON.stringify(parsed ?? { raw: text, status: response.status }, null, 2)
+        );
+        setContacts([]);
+        setTotalCount(0);
         return;
       }
 
-      const mappedContacts = (data ?? []).map((contact: any) => ({
-        ...contact,
-        labels: (contact.labels ?? [])
-          .map((item: any) => item.labels)
-          .filter(Boolean)
-      }));
+      const payload = parsed ?? {};
+      const list = Array.isArray(payload.contacts) ? payload.contacts : [];
+      const count = typeof payload.totalCount === "number" ? payload.totalCount : 0;
 
-      setContacts(mappedContacts);
-      setTotalCount(count ?? 0);
+      setContacts(list);
+      setTotalCount(count);
+    } catch (e: any) {
+      setErrorText(e?.message ?? "unknown error");
+      setContacts([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
@@ -301,7 +285,6 @@ export default function DashboardPage() {
       } catch {}
 
       if (!response.ok) {
-        console.error("STATS_FETCH_ERROR_RAW", { status: response.status, text });
         setStatsError(JSON.stringify(parsed ?? { raw: text }, null, 2));
         setStats(null);
         return;
@@ -316,8 +299,7 @@ export default function DashboardPage() {
 
       setStats(normalized);
       setStatsError(null);
-    } catch (error) {
-      console.error("DASHBOARD_STATS_ERROR", error);
+    } catch {
       setStats(null);
       setStatsError("Failed to load stats.");
     }
@@ -325,6 +307,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadContacts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLocationId, search, sortKey, sortDir, pageIndex, statusFilter]);
 
   useEffect(() => {
@@ -365,7 +348,7 @@ export default function DashboardPage() {
     if (!labelFilters.length) return contacts;
     return contacts.filter((contact) =>
       labelFilters.every((labelId) =>
-        contact.labels.some((label) => label.id === labelId)
+        (contact.labels ?? []).some((label) => label.id === labelId)
       )
     );
   }, [contacts, labelFilters]);
@@ -399,10 +382,10 @@ export default function DashboardPage() {
     setContacts((prev) =>
       prev.map((contact) => {
         if (contact.id !== contactId) return contact;
-        if (contact.labels.some((item) => item.id === label.id)) return contact;
+        if ((contact.labels ?? []).some((item) => item.id === label.id)) return contact;
         return {
           ...contact,
-          labels: [...contact.labels, { id: label.id, name: label.name }]
+          labels: [...(contact.labels ?? []), { id: label.id, name: label.name }]
         };
       })
     );
@@ -424,7 +407,7 @@ export default function DashboardPage() {
         if (contact.id !== contactId) return contact;
         return {
           ...contact,
-          labels: contact.labels.filter((label) => label.id !== labelId)
+          labels: (contact.labels ?? []).filter((label) => label.id !== labelId)
         };
       })
     );
@@ -495,11 +478,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <AppShell
-      title="Kontakte"
-      subtitle="Mini-CRM Übersicht"
-      action={<LogoutButton />}
-    >
+    <AppShell title="Kontakte" subtitle="Mini-CRM Übersicht" action={<LogoutButton />}>
       <div className="mb-6">
         <AuthDebugPanel />
       </div>
@@ -509,12 +488,8 @@ export default function DashboardPage() {
 
         {statsError ? (
           <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-            <div className="font-medium text-amber-200">
-              Fehler beim Laden der Statistiken
-            </div>
-            <pre className="mt-2 whitespace-pre-wrap text-xs text-amber-100">
-              {statsError}
-            </pre>
+            <div className="font-medium text-amber-200">Fehler beim Laden der Statistiken</div>
+            <pre className="mt-2 whitespace-pre-wrap text-xs text-amber-100">{statsError}</pre>
           </div>
         ) : stats ? (
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-text-muted">
@@ -522,17 +497,14 @@ export default function DashboardPage() {
               Gesamt: <span className="text-text-primary">{stats.total}</span>
             </span>
             <span>
-              Gefiltert:{" "}
-              <span className="text-text-primary">{filteredContacts.length}</span>
+              Gefiltert: <span className="text-text-primary">{filteredContacts.length}</span>
               <span className="text-text-muted"> / {contacts.length} geladen</span>
             </span>
             <span>
-              Fehlender Name:{" "}
-              <span className="text-text-primary">{stats.missingName}</span>
+              Fehlender Name: <span className="text-text-primary">{stats.missingName}</span>
             </span>
             <span>
-              Fehlende Nummer:{" "}
-              <span className="text-text-primary">{stats.missingPhone}</span>
+              Fehlende Nummer: <span className="text-text-primary">{stats.missingPhone}</span>
             </span>
             <span className="flex flex-wrap gap-2">
               Standorte:
@@ -553,9 +525,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
-        <div className="text-text-muted">
-          Manuelle Kontakte hinzufügen und verwalten.
-        </div>
+        <div className="text-text-muted">Manuelle Kontakte hinzufügen und verwalten.</div>
         <Button
           onClick={() => {
             setCreateError(null);
@@ -693,16 +663,13 @@ export default function DashboardPage() {
         {loading ? (
           <div className="px-4 py-6 text-sm text-text-muted">Lade Kontakte …</div>
         ) : filteredContacts.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-text-muted">
-            Keine Kontakte für diesen Filter.
-          </div>
+          <div className="px-4 py-6 text-sm text-text-muted">Keine Kontakte für diesen Filter.</div>
         ) : (
           filteredContacts.map((contact) => {
-            const assignedLabelIds = contact.labels.map((label) => label.id);
+            const assignedLabelIds = (contact.labels ?? []).map((label) => label.id);
             const availableLabels = sortLabels(
               labels.filter(
-                (label) =>
-                  !label.is_archived && !assignedLabelIds.includes(label.id)
+                (label) => !label.is_archived && !assignedLabelIds.includes(label.id)
               )
             );
             const availableLabelIds = availableLabels.map((label) => label.id);
@@ -721,10 +688,8 @@ export default function DashboardPage() {
               const labelId = String(active.id);
               const overId = String(over.id);
 
-              const isOverAssigned =
-                overId === "assigned" || assignedLabelIds.includes(overId);
-              const isOverAvailable =
-                overId === "available" || availableLabelIds.includes(overId);
+              const isOverAssigned = overId === "assigned" || assignedLabelIds.includes(overId);
+              const isOverAvailable = overId === "available" || availableLabelIds.includes(overId);
 
               if (isOverAssigned) {
                 if (assignedLabelIds.includes(labelId)) return;
@@ -743,24 +708,16 @@ export default function DashboardPage() {
               <div key={contact.id} className="border-b border-base-800">
                 <button
                   type="button"
-                  onClick={() =>
-                    setExpandedId((prev) =>
-                      prev === contact.id ? null : contact.id
-                    )
-                  }
+                  onClick={() => setExpandedId((prev) => (prev === contact.id ? null : contact.id))}
                   className="grid w-full grid-cols-5 gap-4 px-4 py-3 text-left text-sm hover:bg-base-900/60"
                 >
                   <span>{displayName}</span>
                   <span>{contact.phone_e164 ?? "—"}</span>
                   <span>{contact.location?.name ?? "-"}</span>
-                  <span className="capitalize">
-                    {contact.status.replaceAll("_", " ")}
-                  </span>
+                  <span className="capitalize">{contact.status.replaceAll("_", " ")}</span>
                   <span className="flex flex-wrap gap-2">
-                    {contact.labels.length ? (
-                      contact.labels.map((label) => (
-                        <Chip key={label.id} label={label.name} />
-                      ))
+                    {(contact.labels ?? []).length ? (
+                      (contact.labels ?? []).map((label) => <Chip key={label.id} label={label.name} />)
                     ) : (
                       <span className="text-xs text-text-muted">Keine Labels</span>
                     )}
@@ -771,15 +728,11 @@ export default function DashboardPage() {
                   <div className="border-t border-base-800 bg-base-900/40 px-4 py-4">
                     <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
                       <div className="space-y-3">
-                        <label className="text-xs uppercase text-text-muted">
-                          Status
-                        </label>
+                        <label className="text-xs uppercase text-text-muted">Status</label>
                         <select
                           className="w-full rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
                           value={contact.status}
-                          onChange={(event) =>
-                            handleStatusChange(contact.id, event.target.value)
-                          }
+                          onChange={(event) => handleStatusChange(contact.id, event.target.value)}
                         >
                           {statusOptions.map((status) => (
                             <option key={status.value} value={status.value}>
@@ -790,9 +743,7 @@ export default function DashboardPage() {
 
                         <Button
                           variant="outline"
-                          onClick={() =>
-                            navigator.clipboard.writeText(contact.phone_e164 ?? "")
-                          }
+                          onClick={() => navigator.clipboard.writeText(contact.phone_e164 ?? "")}
                         >
                           Nummer kopieren
                         </Button>
@@ -804,9 +755,7 @@ export default function DashboardPage() {
 
                       <div className="space-y-4">
                         <div>
-                          <label className="text-xs uppercase text-text-muted">
-                            Label suchen
-                          </label>
+                          <label className="text-xs uppercase text-text-muted">Label suchen</label>
                           <Input
                             placeholder="Label suchen..."
                             value={labelSearch}
@@ -835,15 +784,11 @@ export default function DashboardPage() {
                                         key={label.id}
                                         id={label.id}
                                         label={label.name}
-                                        onClick={() =>
-                                          handleAssignLabel(contact.id, label)
-                                        }
+                                        onClick={() => handleAssignLabel(contact.id, label)}
                                       />
                                     ))
                                   ) : (
-                                    <span className="text-xs text-text-muted">
-                                      Keine Labels verfügbar
-                                    </span>
+                                    <span className="text-xs text-text-muted">Keine Labels verfügbar</span>
                                   )}
                                 </div>
                               </SortableContext>
@@ -853,36 +798,26 @@ export default function DashboardPage() {
                               <div className="mb-2 text-xs uppercase text-text-muted">
                                 Labels dieses Kontakts
                               </div>
-                              <SortableContext
-                                items={assignedLabelIds}
-                                strategy={verticalListSortingStrategy}
-                              >
+                              <SortableContext items={assignedLabelIds} strategy={verticalListSortingStrategy}>
                                 <div className="flex flex-wrap gap-2">
-                                  {contact.labels.length ? (
-                                    contact.labels.map((label) => (
+                                  {(contact.labels ?? []).length ? (
+                                    (contact.labels ?? []).map((label) => (
                                       <SortableLabel
                                         key={label.id}
                                         id={label.id}
                                         label={label.name}
-                                        onClick={() =>
-                                          handleRemoveLabel(contact.id, label.id)
-                                        }
+                                        onClick={() => handleRemoveLabel(contact.id, label.id)}
                                       />
                                     ))
                                   ) : (
-                                    <span className="text-xs text-text-muted">
-                                      Noch keine Labels zugewiesen
-                                    </span>
+                                    <span className="text-xs text-text-muted">Noch keine Labels zugewiesen</span>
                                   )}
                                 </div>
                               </SortableContext>
                             </DroppableZone>
                           </div>
 
-                          <DroppableZone
-                            id="remove"
-                            className="mt-4 border-dashed text-xs text-text-muted"
-                          >
+                          <DroppableZone id="remove" className="mt-4 border-dashed text-xs text-text-muted">
                             Label hierhin ziehen zum Entfernen
                           </DroppableZone>
                         </DndContext>
@@ -901,12 +836,8 @@ export default function DashboardPage() {
           <div className="w-full max-w-2xl rounded-lg border border-base-800 bg-base-850 p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-text-primary">
-                  Kontakt hinzufügen
-                </h2>
-                <p className="text-sm text-text-muted">
-                  Lege einen neuen Kontakt manuell an.
-                </p>
+                <h2 className="text-lg font-semibold text-text-primary">Kontakt hinzufügen</h2>
+                <p className="text-sm text-text-muted">Lege einen neuen Kontakt manuell an.</p>
               </div>
               <Button
                 variant="outline"
@@ -930,9 +861,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs uppercase text-text-muted">
-                    Telefon *
-                  </label>
+                  <label className="text-xs uppercase text-text-muted">Telefon *</label>
                   <Input
                     required
                     placeholder="+49..."
@@ -942,9 +871,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs uppercase text-text-muted">
-                    Standort *
-                  </label>
+                  <label className="text-xs uppercase text-text-muted">Standort *</label>
                   <select
                     className="w-full rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
                     value={createLocationId}
@@ -969,9 +896,7 @@ export default function DashboardPage() {
                     value={createLabels}
                     onChange={(event) => setCreateLabels(event.target.value)}
                   />
-                  <p className="mt-1 text-xs text-text-muted">
-                    Kommagetrennte Labels eingeben.
-                  </p>
+                  <p className="mt-1 text-xs text-text-muted">Kommagetrennte Labels eingeben.</p>
                 </div>
               </div>
 
@@ -987,12 +912,8 @@ export default function DashboardPage() {
 
               {createError ? (
                 <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-                  <div className="font-medium text-amber-200">
-                    Fehler beim Speichern
-                  </div>
-                  <pre className="mt-2 whitespace-pre-wrap text-xs text-amber-100">
-                    {createError}
-                  </pre>
+                  <div className="font-medium text-amber-200">Fehler beim Speichern</div>
+                  <pre className="mt-2 whitespace-pre-wrap text-xs text-amber-100">{createError}</pre>
                 </div>
               ) : null}
 
