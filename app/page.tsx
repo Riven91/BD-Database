@@ -22,7 +22,6 @@ import AuthDebugPanel from "@/components/AuthDebugPanel";
 import LogoutButton from "@/components/LogoutButton";
 import { Button, Chip, Input, Textarea } from "@/components/ui";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import { supabaseBrowser } from "@/lib/supabase/browserClient";
 
 const statusOptions = [
   { value: "neu", label: "Neu" },
@@ -139,27 +138,24 @@ function SortableLabel({
 }
 
 function normalizeStats(input: any): ContactStats | null {
-  // Unterstützt beide Shapes: {total,...} ODER {stats:{total,...}}
-  const raw = input?.stats && typeof input.stats === "object" ? input.stats : input;
-  if (!raw || typeof raw !== "object") return null;
+  // Deine Stats-Route liefert: { ok, authenticated, stats: { totalContacts, ... missingName: { sampleSize, missingInSample } } }
+  const rawStats =
+    input?.stats && typeof input.stats === "object" ? input.stats : null;
+  if (!rawStats) return null;
 
-  const byLocation = Array.isArray(raw.byLocation) ? raw.byLocation : [];
+  const total = Number(rawStats.totalContacts ?? 0) || 0;
+
+  const missingNameObj =
+    rawStats.missingName && typeof rawStats.missingName === "object"
+      ? rawStats.missingName
+      : null;
+
+  // missingPhone liefert deine Stats-Route aktuell NICHT -> bleibt 0
   return {
-    total: typeof raw.total === "number" ? raw.total : Number(raw.total ?? 0) || 0,
-    missingName:
-      typeof raw.missingName === "number"
-        ? raw.missingName
-        : Number(raw.missingName ?? 0) || 0,
-    missingPhone:
-      typeof raw.missingPhone === "number"
-        ? raw.missingPhone
-        : Number(raw.missingPhone ?? 0) || 0,
-    byLocation: byLocation
-      .filter(Boolean)
-      .map((x: any) => ({
-        name: typeof x?.name === "string" ? x.name : "—",
-        count: typeof x?.count === "number" ? x.count : Number(x?.count ?? 0) || 0
-      }))
+    total,
+    missingName: Number(missingNameObj?.missingInSample ?? 0) || 0,
+    missingPhone: 0,
+    byLocation: [] // Route liefert byLocation aktuell nicht
   };
 }
 
@@ -172,17 +168,22 @@ export default function DashboardPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = 100;
+
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
   const [locations, setLocations] = useState<LocationOption[]>([]);
+
   const [stats, setStats] = useState<ContactStats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
+
   const [totalCount, setTotalCount] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [labelSearch, setLabelSearch] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createPhone, setCreatePhone] = useState("");
@@ -191,6 +192,7 @@ export default function DashboardPage() {
   const [createNote, setCreateNote] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
@@ -198,51 +200,52 @@ export default function DashboardPage() {
   const loadContacts = async (overridePageIndex?: number) => {
     setLoading(true);
     setErrorText(null);
-    const supabase = supabaseBrowser();
-    let query = supabase
-      .from("contacts")
-      .select(
-        "id, phone_e164, location_id, created_at, name, first_name, last_name, status, location:locations(id,name), labels:contact_labels(labels(id,name,sort_order,is_archived))",
-        { count: "exact" }
-      );
-
-    if (selectedLocationId && selectedLocationId !== "all") {
-      query = query.eq("location_id", selectedLocationId);
-    }
-
-    if (search.trim().length) {
-      const s = search.trim();
-      query = query.or(
-        `phone_e164.ilike.%${s}%,name.ilike.%${s}%,first_name.ilike.%${s}%,last_name.ilike.%${s}%`
-      );
-    }
-
-    if (statusFilter !== "all") {
-      query = query.eq("status", statusFilter);
-    }
-
-    query = query.order(sortKey, { ascending: sortDir === "asc" });
 
     const activePageIndex = overridePageIndex ?? pageIndex;
-    const from = activePageIndex * pageSize;
-    const to = from + pageSize - 1;
-    query = query.range(from, to);
+
+    const params = new URLSearchParams({
+      locationId: selectedLocationId,
+      status: statusFilter,
+      q: search,
+      sortKey,
+      sortDir,
+      pageIndex: String(activePageIndex),
+      pageSize: String(pageSize)
+    });
 
     try {
-      const { data, error, count } = await query;
-      if (error) {
-        console.error("DASHBOARD_CONTACTS_ERROR", error);
-        setErrorText(`${error.message} (${error.code ?? ""})`);
+      const response = await fetchWithAuth(`/api/contacts/list?${params.toString()}`);
+      const text = await response.text();
+
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {}
+
+      if (!response.ok || !parsed?.ok) {
+        setErrorText(
+          parsed?.details
+            ? String(parsed.details)
+            : `Contacts API failed (${response.status})`
+        );
+        setContacts([]);
+        setTotalCount(0);
         return;
       }
-      const mappedContacts = (data ?? []).map((contact: any) => ({
+
+      const mappedContacts = (parsed.contacts ?? []).map((contact: any) => ({
         ...contact,
         labels: (contact.labels ?? [])
-          .map((item: any) => item.labels)
+          .map((item: any) => item.labels ?? item)
           .filter(Boolean)
       }));
+
       setContacts(mappedContacts);
-      setTotalCount(count ?? 0);
+      setTotalCount(parsed.count ?? 0);
+    } catch (e: any) {
+      setErrorText(e?.message ?? "Failed to load contacts.");
+      setContacts([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
@@ -252,30 +255,35 @@ export default function DashboardPage() {
     try {
       const response = await fetchWithAuth("/api/contacts/stats");
       const text = await response.text();
+
       let parsed: any = null;
       try {
         parsed = JSON.parse(text);
       } catch {}
 
       if (!response.ok) {
-        console.error("STATS_FETCH_ERROR_RAW", { status: response.status, text });
-        setStatsError(JSON.stringify(parsed ?? { raw: text }, null, 2));
         setStats(null);
+        setStatsError(JSON.stringify(parsed ?? { raw: text }, null, 2));
+        return;
+      }
+
+      // Deine Stats Route liefert ok:true auch bei Fehlern -> check error/details
+      if (parsed?.error) {
+        setStats(null);
+        setStatsError(JSON.stringify(parsed, null, 2));
         return;
       }
 
       const normalized = normalizeStats(parsed);
       if (!normalized) {
-        // ABSICHERUNG: niemals "irgendwas" setzen, sonst knallt byLocation.length
         setStats(null);
-        setStatsError("Stats payload invalid (missing fields).");
+        setStatsError("Stats payload invalid.");
         return;
       }
 
       setStats(normalized);
       setStatsError(null);
     } catch (error) {
-      console.error("DASHBOARD_STATS_ERROR", error);
       setStats(null);
       setStatsError("Failed to load stats.");
     }
@@ -382,10 +390,14 @@ export default function DashboardPage() {
         };
       })
     );
-    const response = await fetchWithAuth(
-      `/api/contacts/${contactId}/labels?labelId=${labelId}`,
-      { method: "DELETE" }
-    );
+
+    // Deine API erwartet DELETE body JSON (du hattest vorher querystring) -> wir schicken body, damit es sicher ist
+    const response = await fetchWithAuth(`/api/contacts/${contactId}/labels`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ labelId })
+    });
+
     if (!response.ok) {
       await loadContacts();
     }
@@ -442,11 +454,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <AppShell
-      title="Kontakte"
-      subtitle="Mini-CRM Übersicht"
-      action={<LogoutButton />}
-    >
+    <AppShell title="Kontakte" subtitle="Mini-CRM Übersicht" action={<LogoutButton />}>
       <div className="mb-6">
         <AuthDebugPanel />
       </div>
@@ -469,13 +477,8 @@ export default function DashboardPage() {
             </span>
             <span>
               Gefiltert:{" "}
-              <span className="text-text-primary">
-                {filteredContacts.length}
-              </span>
-              <span className="text-text-muted">
-                {" "}
-                / {contacts.length} geladen
-              </span>
+              <span className="text-text-primary">{filteredContacts.length}</span>
+              <span className="text-text-muted"> / {contacts.length} geladen</span>
             </span>
             <span>
               Fehlender Name:{" "}
@@ -504,9 +507,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
-        <div className="text-text-muted">
-          Manuelle Kontakte hinzufügen und verwalten.
-        </div>
+        <div className="text-text-muted">Manuelle Kontakte hinzufügen und verwalten.</div>
         <Button
           onClick={() => {
             setCreateError(null);
@@ -542,6 +543,7 @@ export default function DashboardPage() {
             </option>
           ))}
         </select>
+
         <select
           className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
           value={selectedLocationId}
@@ -557,6 +559,7 @@ export default function DashboardPage() {
             </option>
           ))}
         </select>
+
         <select
           className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
           value={sortKey}
@@ -568,6 +571,7 @@ export default function DashboardPage() {
           <option value="created_at">Sortiert nach Datum</option>
           <option value="name">Sortiert nach Name</option>
         </select>
+
         <select
           className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
           value={sortDir}
@@ -579,6 +583,7 @@ export default function DashboardPage() {
           <option value="desc">Absteigend</option>
           <option value="asc">Aufsteigend</option>
         </select>
+
         <div className="flex flex-wrap gap-2 md:col-span-6">
           {sortLabels(labels.filter((label) => !label.is_archived)).map((label) => (
             <button
@@ -635,6 +640,7 @@ export default function DashboardPage() {
           <span>Status</span>
           <span>Labels</span>
         </div>
+
         {loading ? (
           <div className="px-4 py-6 text-sm text-text-muted">Lade Kontakte …</div>
         ) : filteredContacts.length === 0 ? (
@@ -691,14 +697,10 @@ export default function DashboardPage() {
                   <span>{displayName}</span>
                   <span>{contact.phone_e164 ?? "—"}</span>
                   <span>{contact.location?.name ?? "-"}</span>
-                  <span className="capitalize">
-                    {contact.status.replaceAll("_", " ")}
-                  </span>
+                  <span className="capitalize">{contact.status.replaceAll("_", " ")}</span>
                   <span className="flex flex-wrap gap-2">
                     {contact.labels.length ? (
-                      contact.labels.map((label) => (
-                        <Chip key={label.id} label={label.name} />
-                      ))
+                      contact.labels.map((label) => <Chip key={label.id} label={label.name} />)
                     ) : (
                       <span className="text-xs text-text-muted">Keine Labels</span>
                     )}
@@ -709,15 +711,11 @@ export default function DashboardPage() {
                   <div className="border-t border-base-800 bg-base-900/40 px-4 py-4">
                     <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
                       <div className="space-y-3">
-                        <label className="text-xs uppercase text-text-muted">
-                          Status
-                        </label>
+                        <label className="text-xs uppercase text-text-muted">Status</label>
                         <select
                           className="w-full rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
                           value={contact.status}
-                          onChange={(event) =>
-                            handleStatusChange(contact.id, event.target.value)
-                          }
+                          onChange={(event) => handleStatusChange(contact.id, event.target.value)}
                         >
                           {statusOptions.map((status) => (
                             <option key={status.value} value={status.value}>
@@ -725,14 +723,14 @@ export default function DashboardPage() {
                             </option>
                           ))}
                         </select>
+
                         <Button
                           variant="outline"
-                          onClick={() =>
-                            navigator.clipboard.writeText(contact.phone_e164 ?? "")
-                          }
+                          onClick={() => navigator.clipboard.writeText(contact.phone_e164 ?? "")}
                         >
                           Nummer kopieren
                         </Button>
+
                         {savingId === contact.id ? (
                           <p className="text-xs text-text-muted">Speichern...</p>
                         ) : null}
@@ -740,9 +738,7 @@ export default function DashboardPage() {
 
                       <div className="space-y-4">
                         <div>
-                          <label className="text-xs uppercase text-text-muted">
-                            Label suchen
-                          </label>
+                          <label className="text-xs uppercase text-text-muted">Label suchen</label>
                           <Input
                             placeholder="Label suchen..."
                             value={labelSearch}
@@ -771,9 +767,7 @@ export default function DashboardPage() {
                                         key={label.id}
                                         id={label.id}
                                         label={label.name}
-                                        onClick={() =>
-                                          handleAssignLabel(contact.id, label)
-                                        }
+                                        onClick={() => handleAssignLabel(contact.id, label)}
                                       />
                                     ))
                                   ) : (
@@ -800,9 +794,7 @@ export default function DashboardPage() {
                                         key={label.id}
                                         id={label.id}
                                         label={label.name}
-                                        onClick={() =>
-                                          handleRemoveLabel(contact.id, label.id)
-                                        }
+                                        onClick={() => handleRemoveLabel(contact.id, label.id)}
                                       />
                                     ))
                                   ) : (
@@ -837,12 +829,8 @@ export default function DashboardPage() {
           <div className="w-full max-w-2xl rounded-lg border border-base-800 bg-base-850 p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-text-primary">
-                  Kontakt hinzufügen
-                </h2>
-                <p className="text-sm text-text-muted">
-                  Lege einen neuen Kontakt manuell an.
-                </p>
+                <h2 className="text-lg font-semibold text-text-primary">Kontakt hinzufügen</h2>
+                <p className="text-sm text-text-muted">Lege einen neuen Kontakt manuell an.</p>
               </div>
               <Button
                 variant="outline"
@@ -853,6 +841,7 @@ export default function DashboardPage() {
                 Schließen
               </Button>
             </div>
+
             <form className="space-y-4" onSubmit={handleCreateContact}>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
@@ -863,10 +852,9 @@ export default function DashboardPage() {
                     onChange={(event) => setCreateName(event.target.value)}
                   />
                 </div>
+
                 <div>
-                  <label className="text-xs uppercase text-text-muted">
-                    Telefon *
-                  </label>
+                  <label className="text-xs uppercase text-text-muted">Telefon *</label>
                   <Input
                     required
                     placeholder="+49..."
@@ -874,10 +862,9 @@ export default function DashboardPage() {
                     onChange={(event) => setCreatePhone(event.target.value)}
                   />
                 </div>
+
                 <div>
-                  <label className="text-xs uppercase text-text-muted">
-                    Standort *
-                  </label>
+                  <label className="text-xs uppercase text-text-muted">Standort *</label>
                   <select
                     className="w-full rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
                     value={createLocationId}
@@ -894,6 +881,7 @@ export default function DashboardPage() {
                     ))}
                   </select>
                 </div>
+
                 <div>
                   <label className="text-xs uppercase text-text-muted">Labels</label>
                   <Input
@@ -906,6 +894,7 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </div>
+
               <div>
                 <label className="text-xs uppercase text-text-muted">Notiz</label>
                 <Textarea
@@ -915,16 +904,16 @@ export default function DashboardPage() {
                   onChange={(event) => setCreateNote(event.target.value)}
                 />
               </div>
+
               {createError ? (
                 <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-                  <div className="font-medium text-amber-200">
-                    Fehler beim Speichern
-                  </div>
+                  <div className="font-medium text-amber-200">Fehler beim Speichern</div>
                   <pre className="mt-2 whitespace-pre-wrap text-xs text-amber-100">
                     {createError}
                   </pre>
                 </div>
               ) : null}
+
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-xs text-text-muted">
                   {createLoading ? "Speichern..." : "Felder mit * sind Pflicht."}
