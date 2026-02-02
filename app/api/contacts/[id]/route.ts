@@ -38,3 +38,21 @@ export async function PATCH(
 
   return NextResponse.json({ ok: true });
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const { supabase, user } = await getSupabaseAuthed(request);
+  if (!user) {
+    return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+  }
+
+  const { error } = await supabase.from("contacts").delete().eq("id", params.id);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}

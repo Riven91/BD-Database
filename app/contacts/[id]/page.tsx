@@ -57,6 +57,23 @@ export default function ContactDetailPage() {
     return <div className="p-8 text-text-muted">Lade Kontakt...</div>;
   }
 
+  const handleDelete = async () => {
+    const confirmed = window.confirm(
+      "Kontakt wirklich löschen?\n\nDie Daten werden DSGVO-konform vollständig entfernt und können nicht wiederhergestellt werden."
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const response = await fetch(`/api/contacts/${params.id}`, { method: "DELETE" });
+    if (response.ok) {
+      window.location.href = "/contacts";
+      return;
+    }
+
+    alert("Kontakt konnte nicht gelöscht werden");
+  };
+
   const labels = (contact.labels || [])
     .map((item: any) => item.labels)
     .filter(Boolean);
@@ -143,6 +160,13 @@ export default function ContactDetailPage() {
               </Button>
             ) : null}
           </div>
+          <Button
+            variant="outline"
+            className="border-red-500 text-red-400 hover:bg-red-900/20"
+            onClick={handleDelete}
+          >
+            Kontakt löschen
+          </Button>
         </section>
       </div>
     </AppShell>
