@@ -12,7 +12,9 @@ type LocationOption = {
 
 type ContactOption = {
   id: string;
-  name: string;
+  name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
   phone_e164?: string | null;
 };
 
@@ -68,6 +70,21 @@ function formatDate(value?: string | null) {
   return parsed.toLocaleDateString("de-DE");
 }
 
+function getContactDisplayName(contact: ContactOption) {
+  const directName = contact.name?.trim();
+  if (directName) return directName;
+
+  const firstName = contact.first_name?.trim() ?? "";
+  const lastName = contact.last_name?.trim() ?? "";
+  const combinedName = `${firstName} ${lastName}`.trim();
+  if (combinedName) return combinedName;
+
+  const phone = contact.phone_e164?.trim();
+  if (phone) return phone;
+
+  return "—";
+}
+
 export default function PayboardPage() {
   const monthOptions = useMemo(() => createMonthOptions(), []);
   const [selectedMonth, setSelectedMonth] = useState(monthOptions[0]?.value ?? "");
@@ -107,8 +124,10 @@ export default function PayboardPage() {
     const q = contactSearch.toLowerCase();
     return contacts.filter((contact) => {
       const name = contact.name?.toLowerCase() ?? "";
+      const firstName = contact.first_name?.toLowerCase() ?? "";
+      const lastName = contact.last_name?.toLowerCase() ?? "";
       const phone = contact.phone_e164?.toLowerCase() ?? "";
-      return name.includes(q) || phone.includes(q);
+      return name.includes(q) || firstName.includes(q) || lastName.includes(q) || phone.includes(q);
     });
   }, [contacts, contactSearch]);
 
@@ -381,11 +400,18 @@ export default function PayboardPage() {
                 }
               >
                 <option value="">Bitte wählen</option>
-                {filteredContacts.map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.name || "Unbekannt"} {contact.phone_e164 ? `· ${contact.phone_e164}` : ""}
-                  </option>
-                ))}
+                {filteredContacts.map((contact) => {
+                  const displayName = getContactDisplayName(contact);
+                  const phoneSuffix =
+                    contact.phone_e164 && displayName !== contact.phone_e164
+                      ? `· ${contact.phone_e164}`
+                      : "";
+                  return (
+                    <option key={contact.id} value={contact.id}>
+                      {displayName} {phoneSuffix}
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <div>
