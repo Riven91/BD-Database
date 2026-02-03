@@ -26,8 +26,9 @@ type JobRow = {
   deposit_cents: number | null;
   status: string;
   created_at: string;
-  paid_sum: number;
-  open_sum: number;
+  paid_total_cents: number;
+  paid_in_month_cents: number;
+  open_cents: number;
 };
 
 type RevenueStats = {
@@ -83,6 +84,7 @@ export default function PayboardPage() {
   const [showJobForm, setShowJobForm] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [selectedJob, setSelectedJob] = useState<JobRow | null>(null);
+  const [showOnlyMonthPayments, setShowOnlyMonthPayments] = useState(false);
   const [contacts, setContacts] = useState<ContactOption[]>([]);
   const [contactSearch, setContactSearch] = useState("");
   const [jobForm, setJobForm] = useState({
@@ -171,6 +173,11 @@ export default function PayboardPage() {
     loadJobs();
     loadRevenue();
   }, [selectedMonth, selectedLocation]);
+
+  const visibleJobs = useMemo(() => {
+    if (!showOnlyMonthPayments) return jobs;
+    return jobs.filter((job) => Number(job.paid_in_month_cents ?? 0) > 0);
+  }, [jobs, showOnlyMonthPayments]);
 
   const handleOpenJobForm = () => {
     setShowJobForm(true);
@@ -312,6 +319,15 @@ export default function PayboardPage() {
             ))}
           </select>
         </div>
+        <label className="flex items-center gap-2 text-sm text-text-muted">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-base-800 bg-base-950"
+            checked={showOnlyMonthPayments}
+            onChange={(event) => setShowOnlyMonthPayments(event.target.checked)}
+          />
+          Nur Jobs mit Zahlungen im Monat
+        </label>
       </div>
 
       <div className="mb-8 grid gap-4 md:grid-cols-3">
@@ -535,9 +551,9 @@ export default function PayboardPage() {
               </tr>
             </thead>
             <tbody>
-              {jobs.map((job) => {
+              {visibleJobs.map((job) => {
                 const total = Number(job.total_cents ?? 0);
-                const paid = Number(job.paid_sum ?? 0);
+                const paid = Number(job.paid_total_cents ?? 0);
                 const progress = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
                 return (
                   <tr key={job.id} className="border-t border-base-800">
@@ -551,7 +567,7 @@ export default function PayboardPage() {
                     <td className="px-4 py-3">{job.artist_free_text ?? "—"}</td>
                     <td className="px-4 py-3">{formatDate(job.session_date)}</td>
                     <td className="px-4 py-3">{formatCents(total)}</td>
-                    <td className="px-4 py-3">{formatCents(job.open_sum)}</td>
+                    <td className="px-4 py-3">{formatCents(job.open_cents)}</td>
                     <td className="px-4 py-3">
                       <div className="h-2 w-40 overflow-hidden rounded-full bg-base-800">
                         <div
@@ -562,6 +578,9 @@ export default function PayboardPage() {
                       <div className="mt-1 text-xs text-text-muted">
                         {progress}% · {formatCents(paid)}
                       </div>
+                      <div className="mt-1 text-xs text-emerald-200">
+                        Im Monat bezahlt: {formatCents(Number(job.paid_in_month_cents ?? 0))}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <Button variant="outline" onClick={() => handlePaymentOpen(job)}>
@@ -571,7 +590,7 @@ export default function PayboardPage() {
                   </tr>
                 );
               })}
-              {jobs.length === 0 ? (
+              {visibleJobs.length === 0 ? (
                 <tr>
                   <td className="px-4 py-6 text-center text-text-muted" colSpan={8}>
                     Keine Jobs vorhanden.

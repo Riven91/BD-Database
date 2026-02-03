@@ -22,7 +22,12 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
+  const monthParam = (url.searchParams.get("month") ?? "").trim();
   const locationId = (url.searchParams.get("location_id") ?? "all").trim();
+  const monthStart = monthParam ? new Date(monthParam) : null;
+  const monthEnd = monthStart
+    ? new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1)
+    : null;
 
   let query = supabase
     .from("jobs")
@@ -43,6 +48,7 @@ export async function GET(request: Request) {
 
   const jobIds = (jobs ?? []).map((job: any) => job.id).filter(Boolean);
   let paidByJob = new Map<string, number>();
+  let paidInMonthByJob = new Map<string, number>();
 
   if (jobIds.length) {
     const { data: paymentsData, error: paymentsError } = await supabase
@@ -63,15 +69,40 @@ export async function GET(request: Request) {
         Number(row.paid_cents_sum ?? row.paid_cents ?? 0)
       ])
     );
+
+    if (monthStart && monthEnd) {
+      const { data: paymentsMonthData, error: paymentsMonthError } = await supabase
+        .from("payments")
+        .select("job_id, paid_cents.sum()")
+        .in("job_id", jobIds)
+        .gte("paid_at", monthStart.toISOString())
+        .lt("paid_at", monthEnd.toISOString());
+
+      if (paymentsMonthError) {
+        return json(
+          { error: "payments_month_sum_failed", details: paymentsMonthError.message },
+          500
+        );
+      }
+
+      paidInMonthByJob = new Map(
+        (paymentsMonthData ?? []).map((row: any) => [
+          row.job_id,
+          Number(row.paid_cents_sum ?? row.paid_cents ?? 0)
+        ])
+      );
+    }
   }
 
   const enriched = (jobs ?? []).map((job: any) => {
-    const paidSum = paidByJob.get(job.id) ?? 0;
+    const paidTotalCents = paidByJob.get(job.id) ?? 0;
+    const paidInMonthCents = paidInMonthByJob.get(job.id) ?? 0;
     const totalCents = Number(job.total_cents ?? 0);
     return {
       ...job,
-      paid_sum: paidSum,
-      open_sum: Math.max(0, totalCents - paidSum)
+      paid_total_cents: paidTotalCents,
+      paid_in_month_cents: paidInMonthCents,
+      open_cents: Math.max(0, totalCents - paidTotalCents)
     };
   });
 
