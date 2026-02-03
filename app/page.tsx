@@ -636,14 +636,30 @@ export default function DashboardPage() {
 
       <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
         <div className="text-text-muted">Manuelle Kontakte hinzufügen und verwalten.</div>
-        <Button
-          onClick={() => {
-            setCreateError(null);
-            setShowCreateModal(true);
-          }}
-        >
-          Kontakt hinzufügen
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const qs = new URLSearchParams();
+              if (search.trim()) qs.set("search", search.trim());
+              if (statusFilter) qs.set("status", statusFilter);
+              if (selectedLocationId) qs.set("locationId", selectedLocationId);
+              if (labelFilters.length) qs.set("label", labelFilters.join(","));
+              const exportUrl = `/api/contacts/export?${qs.toString()}`;
+              window.location.href = exportUrl;
+            }}
+          >
+            Export CSV
+          </Button>
+          <Button
+            onClick={() => {
+              setCreateError(null);
+              setShowCreateModal(true);
+            }}
+          >
+            Kontakt hinzufügen
+          </Button>
+        </div>
       </section>
 
       <section className="mb-6 grid gap-4 rounded-lg border border-base-800 bg-base-850 p-4 md:grid-cols-6">
