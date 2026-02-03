@@ -509,8 +509,7 @@ export default function DashboardPage() {
     const payload = {
       name: formName.trim() || null,
       phone_e164: formPhone.trim(),
-      location_id: formLocationId || null,
-      notes: formNotes.trim() || null
+      location_id: formLocationId || null
     };
 
     try {
@@ -551,7 +550,7 @@ export default function DashboardPage() {
                 phone_e164: payload.phone_e164,
                 location_id: payload.location_id,
                 location: payload.location_id ? updatedLocation : null,
-                notes: payload.notes
+                notes: item.notes
               }
             : item
         )
