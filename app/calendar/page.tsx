@@ -163,7 +163,9 @@ export default function CalendarPage() {
   const groupedSlots = useMemo(() => {
     const groups = new Map<string, Slot[]>();
     slots.forEach((slot) => {
-      const key = toISODate(new Date(slot.start_at));
+      const slotStart = new Date(slot.start_at);
+      const groupDate = slotStart < rangeStart ? rangeStart : slotStart;
+      const key = toISODate(groupDate);
       if (!groups.has(key)) {
         groups.set(key, []);
       }
