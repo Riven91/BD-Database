@@ -49,6 +49,9 @@ export function AppShell({
             <Link href="/artists" className="transition hover:text-text-base">
               Artists
             </Link>
+            <Link href="/calendar" className="transition hover:text-text-base">
+              Kalender
+            </Link>
             <Link href="/templates" className="transition hover:text-text-base">
               Templates
             </Link>
