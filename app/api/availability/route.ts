@@ -27,8 +27,8 @@ export async function GET(request: Request) {
     .select(
       "id, start_at, end_at, note, artist:artists(id, name, is_active), location:locations(id, name)"
     )
-    .lt("start_at", end)
-    .gt("end_at", start);
+    .gte("start_at", start)
+    .lt("start_at", end);
 
   if (locationId !== "all") {
     query = query.eq("location_id", locationId);
