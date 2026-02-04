@@ -73,16 +73,16 @@ export default function ArtistsPage() {
   }, [artists, search, showInactive]);
 
   const parseError = async (response: Response) => {
-    try {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
       const payload = await response.json();
       if (payload?.error) {
         return resolveErrorMessage(String(payload.error));
       }
       return resolveErrorMessage(JSON.stringify(payload));
-    } catch {
-      const text = await response.text();
-      return resolveErrorMessage(text || "Aktion fehlgeschlagen.");
     }
+    const text = await response.text();
+    return resolveErrorMessage(text || "Aktion fehlgeschlagen.");
   };
 
   const handleCreate = async () => {
