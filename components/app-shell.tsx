@@ -46,6 +46,9 @@ export function AppShell({
             <Link href="/payboard" className="transition hover:text-text-base">
               Payboard
             </Link>
+            <Link href="/artists" className="transition hover:text-text-base">
+              Artists
+            </Link>
             <Link href="/templates" className="transition hover:text-text-base">
               Templates
             </Link>
