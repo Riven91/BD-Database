@@ -40,5 +40,6 @@ export async function fetchWithAuth(
     ...init,
     headers,
     credentials: "include",
+    cache: init.cache ?? "no-store"
   });
 }
