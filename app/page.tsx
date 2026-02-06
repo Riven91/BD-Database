@@ -199,6 +199,11 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [lastContactsStatus, setLastContactsStatus] = useState<number | null>(null);
+  const [lastContactsOk, setLastContactsOk] = useState<boolean | null>(null);
+  const [lastContactsRaw, setLastContactsRaw] = useState<string>("");
+  const [whoami, setWhoami] = useState<any | null>(null);
+  const [whoamiStatus, setWhoamiStatus] = useState<number | null>(null);
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
@@ -252,7 +257,10 @@ export default function DashboardPage() {
 
     try {
       const response = await fetchWithAuth(`/api/contacts/list?${qs.toString()}`);
+      setLastContactsStatus(response.status);
+      setLastContactsOk(response.ok);
       const text = await response.text();
+      setLastContactsRaw(text.slice(0, 400));
       let parsed: any = null;
       try {
         parsed = JSON.parse(text);
@@ -340,6 +348,25 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadStats();
+  }, []);
+
+  useEffect(() => {
+    const loadWhoami = async () => {
+      try {
+        const response = await fetchWithAuth("/api/whoami");
+        setWhoamiStatus(response.status);
+        const text = await response.text();
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(text);
+        } catch {}
+        setWhoami(parsed ?? { raw: text });
+      } catch (error: any) {
+        setWhoamiStatus(null);
+        setWhoami({ raw: error?.message ?? "unknown error" });
+      }
+    };
+    loadWhoami();
   }, []);
 
   useEffect(() => {
@@ -627,6 +654,26 @@ export default function DashboardPage() {
         ) : (
           <div className="mt-2 text-xs text-text-muted">Lade Statistiken...</div>
         )}
+      </section>
+
+      <section className="mb-4 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
+        <div className="text-xs uppercase text-text-muted">DEBUG</div>
+        <div className="mt-2 space-y-1 text-xs text-text-muted">
+          <div>
+            contacts: loaded={contacts.length} filtered={filteredContacts.length} totalCount=
+            {totalCount}
+          </div>
+          <div>
+            contacts API: http={lastContactsStatus ?? "-"} ok={lastContactsOk ?? "-"} loading=
+            {loading ? "yes" : "no"}
+          </div>
+          <div>errorText: {errorText ?? "-"}</div>
+          <div>
+            whoami: http={whoamiStatus ?? "-"} body=
+            {whoami ? JSON.stringify(whoami).slice(0, 200) : "-"}
+          </div>
+          <div>raw(list): {lastContactsRaw || "-"}</div>
+        </div>
       </section>
 
       <div className="sticky top-0 z-30 space-y-3 bg-base-950/95 pb-3 pt-3 backdrop-blur md:static md:bg-transparent md:pb-0 md:pt-0">
