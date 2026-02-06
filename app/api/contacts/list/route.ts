@@ -60,7 +60,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from("contacts")
       .select(
-        "id, phone_e164, location_id, created_at, name, first_name, last_name, status, location:locations(id,name), labels:contact_labels(labels(id,name,sort_order,is_archived))",
+        "id, phone_e164, location_id, created_at, follow_up_at, name, first_name, last_name, status, location:locations(id,name), labels:contact_labels(labels(id,name,sort_order,is_archived))",
         { count: "exact" }
       );
 

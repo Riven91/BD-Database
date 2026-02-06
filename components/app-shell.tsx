@@ -8,6 +8,7 @@ import { useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard" },
+  { href: "/warteliste", label: "Warteliste" },
   { href: "/labels", label: "Labels" },
   { href: "/import", label: "Import" },
   { href: "/payboard", label: "Payboard" },
