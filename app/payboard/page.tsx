@@ -308,7 +308,7 @@ export default function PayboardPage() {
         </Button>
       }
     >
-      <div className="mb-6 flex flex-wrap items-end gap-4">
+      <div className="sticky top-0 z-30 mb-6 flex flex-wrap items-end gap-4 bg-base-950/95 pb-4 pt-4 backdrop-blur md:static md:bg-transparent md:pb-0 md:pt-0">
         <div className="min-w-[220px]">
           <label className="text-xs uppercase text-text-muted">Monat</label>
           <select
@@ -562,7 +562,58 @@ export default function PayboardPage() {
         <div className="border-b border-base-800 px-4 py-3 text-sm text-text-muted">
           Jobs {isLoading ? "· Laden..." : ""}
         </div>
-        <div className="overflow-x-auto">
+        <div className="space-y-3 px-4 py-4 md:hidden">
+          {visibleJobs.map((job) => {
+            const total = Number(job.total_cents ?? 0);
+            const paid = Number(job.paid_total_cents ?? 0);
+            const progress = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+            return (
+              <div key={job.id} className="rounded-lg border border-base-800 bg-base-900/60 p-4">
+                <div className="text-base font-semibold text-text-base">
+                  {job.contact?.name ?? "Unbekannt"}
+                </div>
+                <div className="mt-1 text-xs text-text-muted">
+                  {job.location?.name ?? "—"}
+                </div>
+                <div className="mt-3 grid gap-1 text-sm text-text-muted">
+                  <div>
+                    Gesamt: <span className="text-text-base">{formatCents(total)}</span>
+                  </div>
+                  <div>
+                    Bezahlt: <span className="text-text-base">{formatCents(paid)}</span>
+                  </div>
+                  <div>
+                    Offen:{" "}
+                    <span className="text-text-base">
+                      {formatCents(Number(job.open_cents ?? 0))}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-base-800">
+                    <div className="h-full bg-emerald-600" style={{ width: `${progress}%` }} />
+                  </div>
+                  <div className="mt-1 text-xs text-text-muted">
+                    {progress}% · {formatCents(paid)}
+                  </div>
+                </div>
+                <Button
+                  variant="primary"
+                  onClick={() => handlePaymentOpen(job)}
+                  className="mt-4 w-full justify-center"
+                >
+                  Zahlung hinzufügen
+                </Button>
+              </div>
+            );
+          })}
+          {visibleJobs.length === 0 ? (
+            <div className="rounded-lg border border-base-800 bg-base-900 p-4 text-sm text-text-muted">
+              Keine Jobs vorhanden.
+            </div>
+          ) : null}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase text-text-muted">

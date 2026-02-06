@@ -276,7 +276,7 @@ export default function CalendarPage() {
         </Button>
       }
     >
-      <div className="mb-6 flex flex-wrap items-center gap-3">
+      <div className="sticky top-0 z-30 mb-6 flex flex-wrap items-center gap-3 bg-base-950/95 pb-4 pt-4 backdrop-blur md:static md:bg-transparent md:pb-0 md:pt-0">
         <div className="min-w-[220px]">
           <label className="mb-1 block text-xs text-text-muted">Standort</label>
           <select
@@ -337,6 +337,12 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      <div className="mb-4 md:hidden">
+        <Button variant="primary" onClick={openCreate} className="w-full justify-center">
+          Slot hinzufügen
+        </Button>
+      </div>
+
       {errorMessage ? (
         <div className="mb-4 rounded-md border border-red-500/60 bg-red-500/10 p-3 text-sm text-red-200">
           {errorMessage}
@@ -357,9 +363,12 @@ export default function CalendarPage() {
                 year: "numeric"
               })}
             </div>
-            <div className="divide-y divide-base-800">
+            <div className="space-y-3 px-4 py-4 md:space-y-0 md:divide-y md:divide-base-800 md:px-0 md:py-0">
               {group.items.map((slot) => (
-                <div key={slot.id} className="flex flex-wrap gap-4 px-4 py-4">
+                <div
+                  key={slot.id}
+                  className="rounded-lg border border-base-800 bg-base-900/60 p-4 md:flex md:flex-wrap md:items-center md:gap-4 md:rounded-none md:border-0 md:bg-transparent md:px-4 md:py-4"
+                >
                   <div className="min-w-[180px]">
                     <div className="text-sm font-semibold text-text-base">
                       {slot.artist?.name ?? "Unbekannt"}
@@ -368,24 +377,21 @@ export default function CalendarPage() {
                       {formatTime(slot.start_at)}–{formatTime(slot.end_at)}
                     </div>
                   </div>
-                  <div className="min-w-[160px] text-sm text-text-muted">
+                  <div className="mt-2 min-w-[160px] text-sm text-text-muted md:mt-0">
                     {slot.location?.name ?? "Kein Standort"}
                   </div>
-                  <div className="flex-1 text-sm text-text-muted">
+                  <div className="mt-2 flex-1 text-sm text-text-muted md:mt-0">
                     {slot.note ? (
                       <span className="text-xs">{slot.note}</span>
                     ) : (
                       <span className="text-xs">Keine Notiz</span>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2 md:mt-0">
                     <Button variant="outline" onClick={() => openEdit(slot)}>
                       Bearbeiten
                     </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleDelete(slot.id)}
-                    >
+                    <Button variant="outline" onClick={() => handleDelete(slot.id)}>
                       Löschen
                     </Button>
                   </div>

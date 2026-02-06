@@ -629,120 +629,122 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
-        <div className="text-text-muted">Manuelle Kontakte hinzufügen und verwalten.</div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              const qs = new URLSearchParams();
-              if (search.trim()) qs.set("search", search.trim());
-              if (statusFilter) qs.set("status", statusFilter);
-              if (selectedLocationId) qs.set("locationId", selectedLocationId);
-              if (labelFilters.length) qs.set("label", labelFilters.join(","));
-              const exportUrl = `/api/contacts/export?${qs.toString()}`;
-              window.location.href = exportUrl;
-            }}
-          >
-            Export CSV
-          </Button>
-          <Button
-            onClick={() => {
-              setCreateError(null);
-              setShowCreateModal(true);
-            }}
-          >
-            Kontakt hinzufügen
-          </Button>
-        </div>
-      </section>
-
-      <section className="mb-6 grid gap-4 rounded-lg border border-base-800 bg-base-850 p-4 md:grid-cols-6">
-        <Input
-          placeholder="Suche nach Name oder Telefon"
-          value={search}
-          onChange={(event) => {
-            setSearch(event.target.value);
-            setPageIndex(0);
-          }}
-          className="md:col-span-2"
-        />
-
-        <select
-          className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
-          value={statusFilter}
-          onChange={(event) => {
-            setStatusFilter(event.target.value);
-            setPageIndex(0);
-          }}
-        >
-          <option value="all">Alle Status</option>
-          {statusOptions.map((status) => (
-            <option key={status.value} value={status.value}>
-              {status.label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
-          value={selectedLocationId}
-          onChange={(event) => {
-            setSelectedLocationId(event.target.value);
-            setPageIndex(0);
-          }}
-        >
-          <option value="all">Alle Standorte</option>
-          {locations.map((location) => (
-            <option key={location.id} value={location.id}>
-              {location.name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
-          value={sortKey}
-          onChange={(event) => {
-            setSortKey(event.target.value as "created_at" | "name");
-            setPageIndex(0);
-          }}
-        >
-          <option value="created_at">Sortiert nach Datum</option>
-          <option value="name">Sortiert nach Name</option>
-        </select>
-
-        <select
-          className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
-          value={sortDir}
-          onChange={(event) => {
-            setSortDir(event.target.value as "asc" | "desc");
-            setPageIndex(0);
-          }}
-        >
-          <option value="desc">Absteigend</option>
-          <option value="asc">Aufsteigend</option>
-        </select>
-
-        <div className="flex flex-wrap gap-2 md:col-span-6">
-          {sortLabels(labels.filter((label) => !label.is_archived)).map((label) => (
-            <button
-              key={label.id}
-              type="button"
+      <div className="sticky top-0 z-30 space-y-3 bg-base-950/95 pb-3 pt-3 backdrop-blur md:static md:bg-transparent md:pb-0 md:pt-0">
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
+          <div className="text-text-muted">Manuelle Kontakte hinzufügen und verwalten.</div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
               onClick={() => {
-                setPageIndex(0);
-                setLabelFilters((prev) =>
-                  prev.includes(label.id)
-                    ? prev.filter((item) => item !== label.id)
-                    : [...prev, label.id]
-                );
+                const qs = new URLSearchParams();
+                if (search.trim()) qs.set("search", search.trim());
+                if (statusFilter) qs.set("status", statusFilter);
+                if (selectedLocationId) qs.set("locationId", selectedLocationId);
+                if (labelFilters.length) qs.set("label", labelFilters.join(","));
+                const exportUrl = `/api/contacts/export?${qs.toString()}`;
+                window.location.href = exportUrl;
               }}
             >
-              <Chip label={label.name} selected={labelFilters.includes(label.id)} />
-            </button>
-          ))}
-        </div>
-      </section>
+              Export CSV
+            </Button>
+            <Button
+              onClick={() => {
+                setCreateError(null);
+                setShowCreateModal(true);
+              }}
+            >
+              Kontakt hinzufügen
+            </Button>
+          </div>
+        </section>
+
+        <section className="grid gap-4 rounded-lg border border-base-800 bg-base-850 p-4 md:grid-cols-6">
+          <Input
+            placeholder="Suche nach Name oder Telefon"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPageIndex(0);
+            }}
+            className="md:col-span-2"
+          />
+
+          <select
+            className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
+            value={statusFilter}
+            onChange={(event) => {
+              setStatusFilter(event.target.value);
+              setPageIndex(0);
+            }}
+          >
+            <option value="all">Alle Status</option>
+            {statusOptions.map((status) => (
+              <option key={status.value} value={status.value}>
+                {status.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
+            value={selectedLocationId}
+            onChange={(event) => {
+              setSelectedLocationId(event.target.value);
+              setPageIndex(0);
+            }}
+          >
+            <option value="all">Alle Standorte</option>
+            {locations.map((location) => (
+              <option key={location.id} value={location.id}>
+                {location.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
+            value={sortKey}
+            onChange={(event) => {
+              setSortKey(event.target.value as "created_at" | "name");
+              setPageIndex(0);
+            }}
+          >
+            <option value="created_at">Sortiert nach Datum</option>
+            <option value="name">Sortiert nach Name</option>
+          </select>
+
+          <select
+            className="rounded-md border border-base-800 bg-base-900 px-3 py-2 text-sm"
+            value={sortDir}
+            onChange={(event) => {
+              setSortDir(event.target.value as "asc" | "desc");
+              setPageIndex(0);
+            }}
+          >
+            <option value="desc">Absteigend</option>
+            <option value="asc">Aufsteigend</option>
+          </select>
+
+          <div className="flex flex-wrap gap-2 md:col-span-6">
+            {sortLabels(labels.filter((label) => !label.is_archived)).map((label) => (
+              <button
+                key={label.id}
+                type="button"
+                onClick={() => {
+                  setPageIndex(0);
+                  setLabelFilters((prev) =>
+                    prev.includes(label.id)
+                      ? prev.filter((item) => item !== label.id)
+                      : [...prev, label.id]
+                  );
+                }}
+              >
+                <Chip label={label.name} selected={labelFilters.includes(label.id)} />
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
 
       {errorText ? (
         <div className="mb-4 rounded-lg border border-amber-500/60 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
@@ -773,7 +775,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="rounded-lg border border-base-800 bg-base-850">
-        <div className="grid grid-cols-5 gap-4 border-b border-base-800 px-4 py-3 text-xs uppercase text-text-muted">
+        <div className="hidden grid-cols-5 gap-4 border-b border-base-800 px-4 py-3 text-xs uppercase text-text-muted md:grid">
           <span>Name</span>
           <span>Telefon</span>
           <span>Standort</span>
@@ -826,7 +828,13 @@ export default function DashboardPage() {
             };
 
             return (
-              <div key={contact.id} className="border-b border-base-800">
+              <div
+                key={contact.id}
+                className={clsx(
+                  "md:border-b md:border-base-800",
+                  "mb-3 rounded-lg border border-base-800 bg-base-900/40 md:mb-0 md:rounded-none md:border-0 md:bg-transparent"
+                )}
+              >
                 <button
                   type="button"
                   onClick={() => {
@@ -834,13 +842,27 @@ export default function DashboardPage() {
                     setEditError(null);
                     setExpandedId((prev) => (prev === contact.id ? null : contact.id));
                   }}
-                  className="grid w-full grid-cols-5 gap-4 px-4 py-3 text-left text-sm hover:bg-base-900/60"
+                  className="grid w-full gap-2 px-4 py-3 text-left text-sm hover:bg-base-900/60 md:grid-cols-5 md:gap-4"
                 >
-                  <span>{displayName}</span>
-                  <span>{contact.phone_e164 ?? "—"}</span>
-                  <span>{contact.location?.name ?? "-"}</span>
-                  <span className="capitalize">{contact.status.replaceAll("_", " ")}</span>
-                  <span className="flex flex-wrap gap-2">
+                  <div className="md:hidden">
+                    <div className="text-base font-semibold text-text-base">{displayName}</div>
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-text-muted">
+                      <span>{contact.phone_e164 ?? "—"}</span>
+                      <span>•</span>
+                      <span>{contact.location?.name ?? "-"}</span>
+                      <span>•</span>
+                      <span className="capitalize">
+                        {contact.status.replaceAll("_", " ")}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="hidden md:inline">{displayName}</span>
+                  <span className="hidden md:inline">{contact.phone_e164 ?? "—"}</span>
+                  <span className="hidden md:inline">{contact.location?.name ?? "-"}</span>
+                  <span className="hidden capitalize md:inline">
+                    {contact.status.replaceAll("_", " ")}
+                  </span>
+                  <span className="hidden flex-wrap gap-2 md:flex">
                     {(contact.labels ?? []).length ? (
                       (contact.labels ?? []).map((label) => <Chip key={label.id} label={label.name} />)
                     ) : (

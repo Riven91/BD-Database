@@ -5,7 +5,13 @@ import { InstallPwaBanner } from "@/components/install-pwa-banner";
 export const metadata: Metadata = {
   title: "Blood Diamond Mini-CRM",
   description: "Internal CRM for Blood Diamond Tattoo",
-  manifest: "/manifest.webmanifest"
+  applicationName: "BD CRM",
+  manifest: "/manifest.webmanifest",
+  themeColor: "#0b0f14",
+  icons: {
+    icon: [{ url: "/favicon.ico" }],
+    apple: [{ url: "/apple-touch-icon.png" }]
+  }
 };
 
 export const viewport: Viewport = {
@@ -19,10 +25,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="de">
-      <head>
-        <link rel="manifest" href="/manifest.webmanifest" />
-        <meta name="theme-color" content="#0b0f14" />
-      </head>
       <body className="min-h-screen bg-base-950 text-text-base">
         {children}
         <InstallPwaBanner />
