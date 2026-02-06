@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   closestCenter,
   DndContext,
@@ -46,6 +46,7 @@ type Contact = {
   notes?: string | null;
   location_id: string | null;
   created_at: string;
+  follow_up_at?: string | null;
   status: string;
   location: { id: string; name: string } | null;
   labels: { id: string; name: string }[];
@@ -61,6 +62,15 @@ type ContactStats = {
 type LocationOption = {
   id: string;
   name: string;
+};
+
+type FileItem = {
+  id: string;
+  file_type: string;
+  file_name: string;
+  file_path: string;
+  created_at: string;
+  note?: string | null;
 };
 
 function sortLabels(labels: Label[]) {
@@ -187,6 +197,15 @@ function normalizeStats(input: any): ContactStats | null {
   };
 }
 
+function formatFileDate(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString("de-DE", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  });
+}
+
 export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -229,6 +248,12 @@ export default function DashboardPage() {
   const [createNote, setCreateNote] = useState("");
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  const [filesByContact, setFilesByContact] = useState<Record<string, FileItem[]>>(
+    {}
+  );
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -358,6 +383,29 @@ export default function DashboardPage() {
       setEditError(null);
       return;
     }
+    if (!(expandedId in filesByContact)) {
+      const loadFiles = async () => {
+        try {
+          const response = await fetchWithAuth(`/api/contacts/${expandedId}/files`);
+          const text = await response.text();
+          let parsed: any = null;
+          try {
+            parsed = JSON.parse(text);
+          } catch {}
+
+          if (!response.ok || !parsed?.ok) {
+            setFilesByContact((prev) => ({ ...prev, [expandedId]: [] }));
+            return;
+          }
+
+          const files = Array.isArray(parsed.files) ? parsed.files : [];
+          setFilesByContact((prev) => ({ ...prev, [expandedId]: files }));
+        } catch {
+          setFilesByContact((prev) => ({ ...prev, [expandedId]: [] }));
+        }
+      };
+      loadFiles();
+    }
     if (isEditing) return;
     const active = contacts.find((contact) => contact.id === expandedId);
     if (!active) return;
@@ -366,7 +414,7 @@ export default function DashboardPage() {
     setFormLocationId(active.location_id ?? active.location?.id ?? "");
     setFormNotes(active.notes ?? "");
     setEditError(null);
-  }, [contacts, expandedId, isEditing]);
+  }, [contacts, expandedId, filesByContact, isEditing]);
 
   const filteredContacts = useMemo(() => {
     if (!labelFilters.length) return contacts;
@@ -806,6 +854,17 @@ export default function DashboardPage() {
               : availableLabels;
 
             const displayName = getContactDisplayName(contact);
+            const files = filesByContact[contact.id] ?? [];
+            const fileGroups = [
+              { key: "consent", label: "Einwilligung" },
+              { key: "stencil", label: "Stencil" },
+              { key: "photo", label: "Foto" },
+              { key: "other", label: "Other" }
+            ];
+            const fileCounts = files.reduce<Record<string, number>>((acc, file) => {
+              acc[file.file_type] = (acc[file.file_type] ?? 0) + 1;
+              return acc;
+            }, {});
 
             const handleDragEnd = (event: DragEndEvent) => {
               const { active, over } = event;
@@ -1078,6 +1137,73 @@ export default function DashboardPage() {
                             Label hierhin ziehen zum Entfernen
                           </DroppableZone>
                         </DndContext>
+
+                        <div className="rounded-lg border border-base-800 bg-base-900/40 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-xs uppercase text-text-muted">Akte</div>
+                            <Button
+                              variant="outline"
+                              onClick={() => fileInputRef.current?.click()}
+                            >
+                              Datei hinzufügen
+                            </Button>
+                          </div>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            className="hidden"
+                            onChange={(event) => {
+                              const input = event.target as HTMLInputElement;
+                              if (input.files && input.files.length > 0) {
+                                alert("Upload folgt als nächster Schritt.");
+                                input.value = "";
+                              }
+                            }}
+                          />
+
+                          <div className="mt-3 grid gap-2 text-xs text-text-muted sm:grid-cols-2 lg:grid-cols-4">
+                            {fileGroups.map((group) => (
+                              <div
+                                key={group.key}
+                                className="rounded-md border border-base-800 bg-base-900/60 px-3 py-2"
+                              >
+                                <div className="text-[11px] uppercase text-text-muted">
+                                  {group.label}
+                                </div>
+                                <div className="text-sm font-semibold text-text-primary">
+                                  {fileCounts[group.key] ?? 0}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="mt-4 space-y-2 text-sm">
+                            {files.length ? (
+                              <ul className="space-y-2">
+                                {files.map((file) => (
+                                  <li
+                                    key={file.id}
+                                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-base-800 bg-base-900/60 px-3 py-2"
+                                  >
+                                    <span className="text-xs uppercase text-text-muted">
+                                      {file.file_type}
+                                    </span>
+                                    <span className="flex-1 text-sm text-text-primary">
+                                      {file.file_name}
+                                    </span>
+                                    <span className="text-xs text-text-muted">
+                                      {formatFileDate(file.created_at)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-xs text-text-muted">
+                                Keine Dateien vorhanden.
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
