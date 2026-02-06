@@ -235,6 +235,10 @@ export default function DashboardPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
+  const debugEnabled =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("debug") === "1";
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
@@ -656,25 +660,27 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section className="mb-4 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
-        <div className="text-xs uppercase text-text-muted">DEBUG</div>
-        <div className="mt-2 space-y-1 text-xs text-text-muted">
-          <div>
-            contacts: loaded={contacts.length} filtered={filteredContacts.length} totalCount=
-            {totalCount}
+      {debugEnabled ? (
+        <section className="mb-4 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
+          <div className="text-xs uppercase text-text-muted">DEBUG</div>
+          <div className="mt-2 space-y-1 text-xs text-text-muted">
+            <div>
+              contacts: loaded={contacts.length} filtered={filteredContacts.length} totalCount=
+              {totalCount}
+            </div>
+            <div>
+              contacts API: http={lastContactsStatus ?? "-"} ok={lastContactsOk ?? "-"} loading=
+              {loading ? "yes" : "no"}
+            </div>
+            <div>errorText: {errorText ?? "-"}</div>
+            <div>
+              whoami: http={whoamiStatus ?? "-"} body=
+              {whoami ? JSON.stringify(whoami).slice(0, 200) : "-"}
+            </div>
+            <div>raw(list): {lastContactsRaw || "-"}</div>
           </div>
-          <div>
-            contacts API: http={lastContactsStatus ?? "-"} ok={lastContactsOk ?? "-"} loading=
-            {loading ? "yes" : "no"}
-          </div>
-          <div>errorText: {errorText ?? "-"}</div>
-          <div>
-            whoami: http={whoamiStatus ?? "-"} body=
-            {whoami ? JSON.stringify(whoami).slice(0, 200) : "-"}
-          </div>
-          <div>raw(list): {lastContactsRaw || "-"}</div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       <div className="sticky top-0 z-30 space-y-3 bg-base-950/95 pb-3 pt-3 backdrop-blur md:static md:bg-transparent md:pb-0 md:pt-0">
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">

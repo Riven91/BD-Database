@@ -114,7 +114,7 @@ export function AppShell({
         </div>
       ) : null}
 
-      <main className="px-8 py-10">
+      <main className="px-4 py-6 md:px-8 md:py-10">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">{title}</h1>
