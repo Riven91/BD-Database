@@ -845,7 +845,7 @@ export default function DashboardPage() {
                   }}
                   className="grid w-full gap-2 px-4 py-3 text-left text-sm hover:bg-base-900/60 md:grid-cols-5 md:gap-4"
                 >
-                  <div className="md:hidden">
+                  <div className="block md:hidden">
                     <div className="text-base font-semibold text-text-base">{displayName}</div>
                     <div className="mt-1 flex flex-wrap gap-2 text-xs text-text-muted">
                       <span>{contact.phone_e164 ?? "—"}</span>
@@ -857,9 +857,9 @@ export default function DashboardPage() {
                       </span>
                     </div>
                   </div>
-                  <span className="hidden md:inline">{displayName}</span>
-                  <span className="hidden md:inline">{contact.phone_e164 ?? "—"}</span>
-                  <span className="hidden md:inline">{contact.location?.name ?? "-"}</span>
+                  <span className="hidden md:block">{displayName}</span>
+                  <span className="hidden md:block">{contact.phone_e164 ?? "—"}</span>
+                  <span className="hidden md:block">{contact.location?.name ?? "-"}</span>
                   <span className="hidden capitalize md:inline">
                     {contact.status.replaceAll("_", " ")}
                   </span>
