@@ -251,7 +251,9 @@ export default function DashboardPage() {
     });
 
     try {
-      const response = await fetchWithAuth(`/api/contacts/list?${qs.toString()}`);
+      const response = await fetchWithAuth(`/api/contacts/list?${qs.toString()}`, {
+        cache: "no-store"
+      });
       const text = await response.text();
       let parsed: any = null;
       try {
@@ -259,9 +261,8 @@ export default function DashboardPage() {
       } catch {}
 
       if (!response.ok) {
-        setErrorText(
-          JSON.stringify(parsed ?? { raw: text, status: response.status }, null, 2)
-        );
+        const message = `Kontakte konnten nicht geladen werden (HTTP ${response.status}).`;
+        setErrorText(message);
         setContacts([]);
         setTotalCount(0);
         return;
@@ -274,7 +275,7 @@ export default function DashboardPage() {
       setContacts(list);
       setTotalCount(count);
     } catch (e: any) {
-      setErrorText(e?.message ?? "unknown error");
+      setErrorText("Kontakte konnten nicht geladen werden.");
       setContacts([]);
       setTotalCount(0);
     } finally {
@@ -748,7 +749,7 @@ export default function DashboardPage() {
 
       {errorText ? (
         <div className="mb-4 rounded-lg border border-amber-500/60 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          Fehler beim Laden der Kontakte: {errorText}
+          {errorText}
         </div>
       ) : null}
 
