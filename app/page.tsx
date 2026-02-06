@@ -588,13 +588,16 @@ export default function DashboardPage() {
 
   return (
     <AppShell title="Kontakte" subtitle="Mini-CRM Übersicht" action={<LogoutButton />}>
-      <section className="mb-6 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
+      <div className="min-w-0 overflow-x-hidden">
+        <section className="mb-6 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
         <div className="text-xs uppercase text-text-muted">Stats</div>
 
         {statsError ? (
           <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
             <div className="font-medium text-amber-200">Fehler beim Laden der Statistiken</div>
-            <pre className="mt-2 whitespace-pre-wrap text-xs text-amber-100">{statsError}</pre>
+            <pre className="mt-2 whitespace-pre-wrap break-words overflow-hidden text-xs text-amber-100">
+              {statsError}
+            </pre>
           </div>
         ) : stats ? (
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-text-muted">
@@ -629,7 +632,7 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <div className="sticky top-0 z-30 space-y-3 bg-base-950/95 pb-3 pt-3 backdrop-blur md:static md:bg-transparent md:pb-0 md:pt-0">
+      <div className="sticky top-0 z-30 min-w-0 space-y-3 bg-base-950/95 pb-3 pt-3 backdrop-blur md:static md:bg-transparent md:pb-0 md:pt-0">
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
           <div className="text-text-muted">Manuelle Kontakte hinzufügen und verwalten.</div>
           <div className="flex flex-wrap gap-2">
@@ -774,7 +777,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-base-800 bg-base-850">
+      <section className="min-w-0 rounded-lg border border-base-800 bg-base-850">
         <div className="hidden grid-cols-5 gap-4 border-b border-base-800 px-4 py-3 text-xs uppercase text-text-muted md:grid">
           <span>Name</span>
           <span>Telefon</span>
@@ -842,16 +845,18 @@ export default function DashboardPage() {
                     setEditError(null);
                     setExpandedId((prev) => (prev === contact.id ? null : contact.id));
                   }}
-                  className="grid w-full gap-2 px-4 py-3 text-left text-sm hover:bg-base-900/60 md:grid-cols-5 md:gap-4"
+                  className="grid w-full min-w-0 gap-2 px-4 py-3 text-left text-sm hover:bg-base-900/60 md:grid-cols-5 md:gap-4"
                 >
-                  <div className="md:hidden">
-                    <div className="text-base font-semibold text-text-base">{displayName}</div>
-                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-text-muted">
-                      <span>{contact.phone_e164 ?? "—"}</span>
-                      <span>•</span>
-                      <span>{contact.location?.name ?? "-"}</span>
-                      <span>•</span>
-                      <span className="capitalize">
+                  <div className="md:hidden min-w-0">
+                    <div className="truncate text-base font-semibold text-text-base">
+                      {displayName}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-2 min-w-0 overflow-hidden text-xs text-text-muted">
+                      <span className="truncate">{contact.phone_e164 ?? "—"}</span>
+                      <span className="truncate">•</span>
+                      <span className="truncate">{contact.location?.name ?? "-"}</span>
+                      <span className="truncate">•</span>
+                      <span className="truncate capitalize">
                         {contact.status.replaceAll("_", " ")}
                       </span>
                     </div>
@@ -998,7 +1003,7 @@ export default function DashboardPage() {
                             <div className="font-medium text-amber-200">
                               Fehler beim Speichern
                             </div>
-                            <pre className="mt-2 whitespace-pre-wrap text-xs text-amber-100">
+                            <pre className="mt-2 whitespace-pre-wrap break-words overflow-hidden text-xs text-amber-100">
                               {editError}
                             </pre>
                           </div>
@@ -1165,7 +1170,9 @@ export default function DashboardPage() {
               {createError ? (
                 <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
                   <div className="font-medium text-amber-200">Fehler beim Speichern</div>
-                  <pre className="mt-2 whitespace-pre-wrap text-xs text-amber-100">{createError}</pre>
+                  <pre className="mt-2 whitespace-pre-wrap break-words overflow-hidden text-xs text-amber-100">
+                    {createError}
+                  </pre>
                 </div>
               ) : null}
 
@@ -1191,6 +1198,7 @@ export default function DashboardPage() {
           </div>
         </div>
       ) : null}
+      </div>
     </AppShell>
   );
 }
