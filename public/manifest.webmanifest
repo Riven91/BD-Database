@@ -1,8 +1,9 @@
 {
-  "name": "Blood Diamond Mini-CRM",
+  "name": "BD CRM",
   "short_name": "BD CRM",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0a0f0f",
-  "theme_color": "#0a0f0f"
+  "background_color": "#0b0f14",
+  "theme_color": "#0b0f14"
 }
