@@ -18,7 +18,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import { AppShell } from "@/components/app-shell";
-import AuthDebugPanel from "@/components/AuthDebugPanel";
 import LogoutButton from "@/components/LogoutButton";
 import { Button, Chip, Input, Textarea } from "@/components/ui";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
@@ -589,10 +588,6 @@ export default function DashboardPage() {
 
   return (
     <AppShell title="Kontakte" subtitle="Mini-CRM Übersicht" action={<LogoutButton />}>
-      <div className="mb-6">
-        <AuthDebugPanel />
-      </div>
-
       <section className="mb-6 rounded-lg border border-base-800 bg-base-850 px-4 py-3 text-sm">
         <div className="text-xs uppercase text-text-muted">Stats</div>
 
