@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
+import { InstallPwaBanner } from "@/components/install-pwa-banner";
 
 export const metadata: Metadata = {
   title: "Blood Diamond Mini-CRM",
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0f0f"
+  themeColor: "#0b0f14"
 };
 
 export default function RootLayout({
@@ -18,8 +19,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="de">
+      <head>
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="theme-color" content="#0b0f14" />
+      </head>
       <body className="min-h-screen bg-base-950 text-text-base">
         {children}
+        <InstallPwaBanner />
       </body>
     </html>
   );
