@@ -229,6 +229,7 @@ export default function DashboardPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [labelSearch, setLabelSearch] = useState("");
+  const [dndDebug, setDndDebug] = useState<any>(null);
 
   const [savingId, setSavingId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -873,6 +874,23 @@ export default function DashboardPage() {
 
             const handleDragEnd = (event: DragEndEvent) => {
               const { active, over } = event;
+
+              const debug = {
+                ts: new Date().toISOString(),
+                activeId: active?.id ? String(active.id) : null,
+                overId: over?.id ? String(over.id) : null,
+                overIsNull: !over,
+                assignedHasActive: active?.id
+                  ? assignedLabelIds.includes(String(active.id))
+                  : false,
+                availableHasActive: active?.id
+                  ? availableLabelIds.includes(String(active.id))
+                  : false,
+                assignedCount: assignedLabelIds.length,
+                availableCount: availableLabelIds.length
+              };
+              setDndDebug(debug);
+
               if (!over) return;
 
               const labelId = String(active.id);
@@ -1143,6 +1161,17 @@ export default function DashboardPage() {
                               </SortableContext>
                             </DroppableZone>
                           </div>
+
+                          {dndDebug ? (
+                            <div className="mt-3 rounded-md border border-base-800 bg-base-900/40 p-3 text-[11px] text-text-muted">
+                              <div className="font-semibold text-text-primary">
+                                DND Debug (last DragEnd)
+                              </div>
+                              <pre className="mt-2 whitespace-pre-wrap break-words">
+                                {JSON.stringify(dndDebug, null, 2)}
+                              </pre>
+                            </div>
+                          ) : null}
 
                           <DroppableZone id="remove" className="mt-4 border-dashed text-xs text-text-muted">
                             Label hierhin ziehen zum Entfernen
