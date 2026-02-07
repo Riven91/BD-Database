@@ -48,6 +48,25 @@ function formatCents(value: number) {
   return currencyFormatter.format((value || 0) / 100);
 }
 
+function parseEuroToCents(value: string) {
+  const normalized = value.replace(/\s/g, "").replace(",", ".").trim();
+  if (!normalized) return null;
+  const numeric = Number(normalized);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.round(numeric * 100);
+}
+
+function normalizeJobStatus(status: string) {
+  const trimmed = status.trim().toLowerCase();
+  if (!trimmed) return "geplant";
+  if (trimmed === "in arbeit") return "in_arbeit";
+  if (trimmed === "fertig") return "abgeschlossen";
+  if (trimmed === "in_arbeit" || trimmed === "abgeschlossen" || trimmed === "geplant") {
+    return trimmed;
+  }
+  return "geplant";
+}
+
 function createMonthOptions() {
   const options: { value: string; label: string }[] = [];
   const now = new Date();
@@ -216,20 +235,21 @@ export default function PayboardPage() {
   };
 
   const handleJobSubmit = async () => {
-    const totalCents = Math.round(Number(jobForm.total_eur.replace(",", ".")) * 100);
+    const totalCents = parseEuroToCents(jobForm.total_eur) ?? null;
     const depositCentsRaw = jobForm.deposit_eur.trim()
-      ? Math.round(Number(jobForm.deposit_eur.replace(",", ".")) * 100)
-      : null;
+      ? parseEuroToCents(jobForm.deposit_eur)
+      : 0;
+    const normalizedStatus = normalizeJobStatus(jobForm.status);
 
     if (!jobForm.contact_id || !jobForm.location_id) {
       setErrorMessage("Kontakt und Standort sind Pflichtfelder.");
       return;
     }
-    if (!Number.isFinite(totalCents) || totalCents < 0) {
+    if (totalCents === null || totalCents < 0) {
       setErrorMessage("Gesamtpreis muss >= 0 sein.");
       return;
     }
-    if (depositCentsRaw !== null && (!Number.isFinite(depositCentsRaw) || depositCentsRaw < 0)) {
+    if (depositCentsRaw === null || depositCentsRaw < 0) {
       setErrorMessage("Anzahlung muss >= 0 sein.");
       return;
     }
@@ -243,7 +263,7 @@ export default function PayboardPage() {
         session_date: jobForm.session_date || null,
         total_cents: totalCents,
         deposit_cents: depositCentsRaw,
-        status: jobForm.status
+        status: normalizedStatus
       })
     });
 
@@ -271,8 +291,12 @@ export default function PayboardPage() {
 
   const handlePaymentSubmit = async () => {
     if (!selectedJob) return;
-    const paidCents = Math.round(Number(paymentForm.paid_eur.replace(",", ".")) * 100);
-    if (!Number.isFinite(paidCents) || paidCents <= 0) {
+    if (!paymentForm.paid_eur.trim()) {
+      setErrorMessage("Bitte einen Betrag eingeben.");
+      return;
+    }
+    const paidCents = parseEuroToCents(paymentForm.paid_eur);
+    if (paidCents === null || paidCents <= 0) {
       setErrorMessage("Betrag muss > 0 sein.");
       return;
     }

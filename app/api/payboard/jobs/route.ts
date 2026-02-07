@@ -5,6 +5,17 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const runtime = "nodejs";
 
+const allowedStatuses = new Set(["geplant", "in_arbeit", "abgeschlossen"]);
+
+function normalizeStatus(status?: string | null) {
+  const trimmed = status?.trim().toLowerCase() ?? "";
+  if (!trimmed) return "geplant";
+  if (trimmed === "in arbeit") return "in_arbeit";
+  if (trimmed === "fertig") return "abgeschlossen";
+  if (allowedStatuses.has(trimmed)) return trimmed;
+  return "geplant";
+}
+
 function json(data: any, status = 200) {
   return new NextResponse(JSON.stringify(data), {
     status,
@@ -51,29 +62,26 @@ export async function GET(request: Request) {
   let paidInMonthByJob = new Map<string, number>();
 
   if (jobIds.length) {
-    const { data: paymentsData, error: paymentsError } = await supabase
-      .from("payments")
-      .select("job_id, paid_cents.sum()")
-      .in("job_id", jobIds);
-
-    if (paymentsError) {
-      return json(
-        { error: "payments_sum_failed", details: paymentsError.message },
-        500
+    for (const jobId of jobIds) {
+      const { data: paidSum, error: paymentsError } = await supabase.rpc(
+        "payments_sum_for_job",
+        { p_job_id: jobId }
       );
-    }
 
-    paidByJob = new Map(
-      (paymentsData ?? []).map((row: any) => [
-        row.job_id,
-        Number(row.paid_cents_sum ?? row.paid_cents ?? 0)
-      ])
-    );
+      if (paymentsError) {
+        return json(
+          { error: "payments_sum_failed", details: paymentsError.message },
+          500
+        );
+      }
+
+      paidByJob.set(jobId, Number(paidSum ?? 0));
+    }
 
     if (monthStart && monthEnd) {
       const { data: paymentsMonthData, error: paymentsMonthError } = await supabase
         .from("payments")
-        .select("job_id, paid_cents.sum()")
+        .select("job_id, paid_cents, paid_at")
         .in("job_id", jobIds)
         .gte("paid_at", monthStart.toISOString())
         .lt("paid_at", monthEnd.toISOString());
@@ -85,12 +93,13 @@ export async function GET(request: Request) {
         );
       }
 
-      paidInMonthByJob = new Map(
-        (paymentsMonthData ?? []).map((row: any) => [
-          row.job_id,
-          Number(row.paid_cents_sum ?? row.paid_cents ?? 0)
-        ])
-      );
+      const monthMap = new Map<string, number>();
+      for (const row of paymentsMonthData ?? []) {
+        const jobId = String(row.job_id);
+        const paidCents = Number(row.paid_cents ?? 0);
+        monthMap.set(jobId, (monthMap.get(jobId) ?? 0) + paidCents);
+      }
+      paidInMonthByJob = monthMap;
     }
   }
 
@@ -122,11 +131,11 @@ export async function POST(request: Request) {
     return json({ error: "invalid_json" }, 400);
   }
 
-  const totalCents = Number(body.total_cents);
-  const depositCents =
-    body.deposit_cents === null || body.deposit_cents === undefined
-      ? null
-      : Number(body.deposit_cents);
+  const totalCents = Math.round(Number(body.total_cents));
+  const depositCentsRaw =
+    body.deposit_cents === null || body.deposit_cents === undefined || body.deposit_cents === ""
+      ? 0
+      : Math.round(Number(body.deposit_cents));
 
   if (!body.contact_id || !body.location_id) {
     return json({ error: "missing_required_fields" }, 400);
@@ -136,7 +145,7 @@ export async function POST(request: Request) {
     return json({ error: "invalid_total_cents" }, 400);
   }
 
-  if (depositCents !== null && (!Number.isFinite(depositCents) || depositCents < 0)) {
+  if (!Number.isFinite(depositCentsRaw) || depositCentsRaw < 0) {
     return json({ error: "invalid_deposit_cents" }, 400);
   }
 
@@ -146,8 +155,8 @@ export async function POST(request: Request) {
     artist_free_text: body.artist_free_text?.trim() || null,
     session_date: body.session_date || null,
     total_cents: totalCents,
-    deposit_cents: depositCents,
-    status: body.status?.trim() || "geplant"
+    deposit_cents: depositCentsRaw,
+    status: normalizeStatus(body.status)
   };
 
   const { data, error } = await supabase.from("jobs").insert(payload).select("*").single();
