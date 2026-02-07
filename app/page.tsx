@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  closestCenter,
   DndContext,
   type DragEndEvent,
   PointerSensor,
+  pointerWithin,
   useDroppable,
   useSensor,
   useSensors
@@ -878,6 +878,12 @@ export default function DashboardPage() {
               const labelId = String(active.id);
               const overId = String(over.id);
 
+              if (overId === "remove") {
+                if (!assignedLabelIds.includes(labelId)) return;
+                handleRemoveLabel(contact.id, labelId);
+                return;
+              }
+
               const isOverAssigned = overId === "assigned" || assignedLabelIds.includes(overId);
               const isOverAvailable = overId === "available" || availableLabelIds.includes(overId);
 
@@ -888,7 +894,7 @@ export default function DashboardPage() {
                 return;
               }
 
-              if (isOverAvailable || overId === "remove") {
+              if (isOverAvailable) {
                 if (!assignedLabelIds.includes(labelId)) return;
                 handleRemoveLabel(contact.id, labelId);
               }
@@ -1086,7 +1092,7 @@ export default function DashboardPage() {
 
                         <DndContext
                           sensors={sensors}
-                          collisionDetection={closestCenter}
+                          collisionDetection={pointerWithin}
                           onDragEnd={handleDragEnd}
                         >
                           <div className="grid gap-4 lg:grid-cols-2">
