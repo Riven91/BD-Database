@@ -62,21 +62,24 @@ export async function GET(request: Request) {
   let paidInMonthByJob = new Map<string, number>();
 
   if (jobIds.length) {
-    for (const jobId of jobIds) {
-      const { data: paidSum, error: paymentsError } = await supabase.rpc(
-        "payments_sum_for_job",
-        { p_job_id: jobId }
+    const { data: paidSums, error: paymentsError } = await supabase.rpc(
+      "payments_sum_for_jobs",
+      { p_job_ids: jobIds }
+    );
+
+    if (paymentsError) {
+      return json(
+        { error: "payments_sum_failed", details: paymentsError.message },
+        500
       );
-
-      if (paymentsError) {
-        return json(
-          { error: "payments_sum_failed", details: paymentsError.message },
-          500
-        );
-      }
-
-      paidByJob.set(jobId, Number(paidSum ?? 0));
     }
+
+    const paidMap = new Map<string, number>();
+    for (const row of paidSums ?? []) {
+      const jobId = String(row.job_id);
+      paidMap.set(jobId, Number(row.sum_cents ?? 0));
+    }
+    paidByJob = paidMap;
 
     if (monthStart && monthEnd) {
       const { data: paymentsMonthData, error: paymentsMonthError } = await supabase
