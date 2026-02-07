@@ -496,7 +496,13 @@ export default function DashboardPage() {
     );
 
     if (!response.ok) {
-      await loadContacts();
+      const text = await response.text().catch(() => "");
+      setEditError(
+        `REMOVE LABEL FAILED: ${response.status} ${response.statusText}\n${text}`
+      );
+      setTimeout(() => {
+        loadContacts();
+      }, 500);
     }
   };
 
