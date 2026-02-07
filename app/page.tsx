@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  closestCenter,
   DndContext,
   type DragEndEvent,
   PointerSensor,
+  pointerWithin,
   useDroppable,
   useSensor,
   useSensors
@@ -495,7 +495,13 @@ export default function DashboardPage() {
     );
 
     if (!response.ok) {
-      await loadContacts();
+      const text = await response.text().catch(() => "");
+      setEditError(
+        `REMOVE LABEL FAILED: ${response.status} ${response.statusText}\n${text}`
+      );
+      setTimeout(() => {
+        loadContacts();
+      }, 500);
     }
   };
 
@@ -873,6 +879,7 @@ export default function DashboardPage() {
 
             const handleDragEnd = (event: DragEndEvent) => {
               const { active, over } = event;
+
               if (!over) return;
 
               const labelId = String(active.id);
@@ -888,7 +895,7 @@ export default function DashboardPage() {
                 return;
               }
 
-              if (isOverAvailable || overId === "remove") {
+              if (isOverAvailable) {
                 if (!assignedLabelIds.includes(labelId)) return;
                 handleRemoveLabel(contact.id, labelId);
               }
@@ -1086,7 +1093,7 @@ export default function DashboardPage() {
 
                         <DndContext
                           sensors={sensors}
-                          collisionDetection={closestCenter}
+                          collisionDetection={pointerWithin}
                           onDragEnd={handleDragEnd}
                         >
                           <div className="grid gap-4 lg:grid-cols-2">
@@ -1137,10 +1144,6 @@ export default function DashboardPage() {
                               </SortableContext>
                             </DroppableZone>
                           </div>
-
-                          <DroppableZone id="remove" className="mt-4 border-dashed text-xs text-text-muted">
-                            Label hierhin ziehen zum Entfernen
-                          </DroppableZone>
                         </DndContext>
 
                         <div className="rounded-lg border border-base-800 bg-base-900/40 p-4">
