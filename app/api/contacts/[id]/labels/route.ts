@@ -62,11 +62,16 @@ export async function DELETE(
       return NextResponse.json({ error: "missing_contact_id" }, { status: 400 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const labelIdFromQuery = searchParams.get("labelId");
     const body = await request.json().catch(() => null);
-    const labelId = body?.labelId;
+    const labelId = labelIdFromQuery ?? body?.labelId;
 
     if (!labelId || typeof labelId !== "string") {
-      return NextResponse.json({ error: "missing_label_id" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "missing labelId" },
+        { status: 400 }
+      );
     }
 
     const { error } = await supabase
