@@ -63,9 +63,7 @@ export async function DELETE(
     }
 
     const { searchParams } = new URL(request.url);
-    const labelIdFromQuery = searchParams.get("labelId");
-    const body = await request.json().catch(() => null);
-    const labelId = labelIdFromQuery ?? body?.labelId;
+    const labelId = searchParams.get("labelId");
 
     if (!labelId || typeof labelId !== "string") {
       return NextResponse.json(
