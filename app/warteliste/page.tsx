@@ -30,6 +30,13 @@ const statusOptions = [
   { value: "tot", label: "Tot" }
 ];
 
+const DEBUG_DND = process.env.NEXT_PUBLIC_DEBUG_DND === "true";
+const debugDndLog = (...args: unknown[]) => {
+  if (DEBUG_DND) {
+    console.info("[Labels DnD]", ...args);
+  }
+};
+
 type Label = {
   id: string;
   name: string;
@@ -88,12 +95,13 @@ function getContactDisplayName(contact: Contact) {
 function DroppableZone({
   id,
   children,
-  className
+  className,
+  ...rest
 }: {
   id: string;
   children: React.ReactNode;
   className?: string;
-}) {
+} & React.HTMLAttributes<HTMLDivElement>) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <div
@@ -103,6 +111,7 @@ function DroppableZone({
         isOver && "border-emerald-600 bg-base-900",
         className
       )}
+      {...rest}
     >
       {children}
     </div>
@@ -132,6 +141,12 @@ function SortableLabel({
       style={style}
       type="button"
       onClick={onClick}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData("text/label-id", String(id));
+        event.dataTransfer.effectAllowed = "move";
+        debugDndLog("drag start", { labelId: id });
+      }}
       className={clsx("touch-none", isDragging && "opacity-60")}
       {...attributes}
       {...listeners}
@@ -841,6 +856,14 @@ export default function DashboardPage() {
 
             const displayName = getContactDisplayName(contact);
 
+            const handleRemoveDrop = (event: React.DragEvent<HTMLDivElement>) => {
+              event.preventDefault();
+              const labelId = event.dataTransfer.getData("text/label-id");
+              debugDndLog("drop remove zone", { labelId, contactId: contact.id });
+              if (!labelId || !assignedLabelIds.includes(labelId)) return;
+              handleRemoveLabel(contact.id, labelId);
+            };
+
             const handleDragEnd = (event: DragEndEvent) => {
               const { active, over } = event;
               if (!over) return;
@@ -1108,7 +1131,15 @@ export default function DashboardPage() {
                             </DroppableZone>
                           </div>
 
-                          <DroppableZone id="remove" className="mt-4 border-dashed text-xs text-text-muted">
+                          <DroppableZone
+                            id="remove"
+                            className="mt-4 border-dashed text-xs text-text-muted pointer-events-auto relative z-10"
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                              debugDndLog("drag over remove zone", { contactId: contact.id });
+                            }}
+                            onDrop={handleRemoveDrop}
+                          >
                             Label hierhin ziehen zum Entfernen
                           </DroppableZone>
                         </DndContext>
