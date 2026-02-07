@@ -252,12 +252,36 @@ export default function DashboardPage() {
   const [filesByContact, setFilesByContact] = useState<Record<string, FileItem[]>>(
     {}
   );
+  const [uploadType, setUploadType] = useState<
+    "consent" | "stencil" | "photo" | "other" | null
+  >(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
+
+  const loadFilesForContact = async (contactId: string) => {
+    try {
+      const response = await fetchWithAuth(`/api/contacts/${contactId}/files`);
+      const text = await response.text();
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {}
+
+      if (!response.ok || !parsed?.ok) {
+        setFilesByContact((prev) => ({ ...prev, [contactId]: [] }));
+        return;
+      }
+
+      const files = Array.isArray(parsed.files) ? parsed.files : [];
+      setFilesByContact((prev) => ({ ...prev, [contactId]: files }));
+    } catch {
+      setFilesByContact((prev) => ({ ...prev, [contactId]: [] }));
+    }
+  };
 
   const loadContacts = async (overridePageIndex?: number) => {
     setLoading(true);
@@ -384,27 +408,7 @@ export default function DashboardPage() {
       return;
     }
     if (!(expandedId in filesByContact)) {
-      const loadFiles = async () => {
-        try {
-          const response = await fetchWithAuth(`/api/contacts/${expandedId}/files`);
-          const text = await response.text();
-          let parsed: any = null;
-          try {
-            parsed = JSON.parse(text);
-          } catch {}
-
-          if (!response.ok || !parsed?.ok) {
-            setFilesByContact((prev) => ({ ...prev, [expandedId]: [] }));
-            return;
-          }
-
-          const files = Array.isArray(parsed.files) ? parsed.files : [];
-          setFilesByContact((prev) => ({ ...prev, [expandedId]: files }));
-        } catch {
-          setFilesByContact((prev) => ({ ...prev, [expandedId]: [] }));
-        }
-      };
-      loadFiles();
+      loadFilesForContact(expandedId);
     }
     if (isEditing) return;
     const active = contacts.find((contact) => contact.id === expandedId);
@@ -415,6 +419,7 @@ export default function DashboardPage() {
     setFormNotes(active.notes ?? "");
     setEditError(null);
   }, [contacts, expandedId, filesByContact, isEditing]);
+
 
   const filteredContacts = useMemo(() => {
     if (!labelFilters.length) return contacts;
@@ -1141,23 +1146,69 @@ export default function DashboardPage() {
                         <div className="rounded-lg border border-base-800 bg-base-900/40 p-4">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="text-xs uppercase text-text-muted">Akte</div>
-                            <Button
-                              variant="outline"
-                              onClick={() => fileInputRef.current?.click()}
-                            >
-                              Datei hinzufügen
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setUploadType("consent");
+                                  fileInputRef.current?.click();
+                                }}
+                              >
+                                Einwilligung hochladen
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setUploadType("stencil");
+                                  fileInputRef.current?.click();
+                                }}
+                              >
+                                Stencil hochladen
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setUploadType("photo");
+                                  fileInputRef.current?.click();
+                                }}
+                              >
+                                Foto hochladen
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setUploadType("other");
+                                  fileInputRef.current?.click();
+                                }}
+                              >
+                                Sonstiges hochladen
+                              </Button>
+                            </div>
                           </div>
                           <input
                             ref={fileInputRef}
                             type="file"
                             className="hidden"
-                            onChange={(event) => {
+                            onChange={async (event) => {
                               const input = event.target as HTMLInputElement;
-                              if (input.files && input.files.length > 0) {
+                              if (!input.files?.[0] || !uploadType || !expandedId) return;
+
+                              const fd = new FormData();
+                              fd.append("file", input.files[0]);
+                              fd.append("file_type", uploadType);
+
+                              const res = await fetchWithAuth(
+                                `/api/contacts/${expandedId}/files`,
+                                { method: "POST", body: fd }
+                              );
+
+                              if (res.ok) {
                                 alert("Upload folgt als nächster Schritt.");
-                                input.value = "";
+                                await loadFilesForContact(expandedId);
                               }
+
+                              setUploadType(null);
+                              input.value = "";
                             }}
                           />
 
